@@ -224,13 +224,26 @@ class CuriosityManager:
         # 1. Unknown
         # 2. Use 'direct' ask method
         # 3. Trust level is sufficient
+        # 4. Not asked recently (at least 24 hours ago)
         unknown_info = []
+        current_time = datetime.datetime.now()
         
         for info_type, info in self.knowledge_goals.items():
-            if (not info['known'] and 
-                info['ask_method'] == 'direct' and
-                self.trust_level >= info['min_trust']):
-                unknown_info.append((info_type, info))
+            # Check if information is unknown
+            if not info['known']:
+                # Check if ask method is direct
+                if info['ask_method'] == 'direct':
+                    # Check if trust level is sufficient
+                    if self.trust_level >= info['min_trust']:
+                        # Check if not asked recently or never asked
+                        if info['last_asked'] is None:
+                            unknown_info.append((info_type, info))
+                        else:
+                            # Calculate time difference in seconds
+                            time_diff = (current_time - info['last_asked']).total_seconds()
+                            # 86400 seconds = 24 hours
+                            if time_diff > 86400:
+                                unknown_info.append((info_type, info))
         
         return unknown_info
     

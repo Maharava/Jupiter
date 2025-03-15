@@ -1,6 +1,7 @@
 import json
 import re
 import datetime
+import os  # Add this line
 
 class DataManager:
     """Manages user data storage and extraction."""

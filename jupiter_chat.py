@@ -4,6 +4,7 @@ import datetime
 import random
 import requests
 import re
+import json
 from colorama import init, Fore, Style
 
 from curiosity_manager import CuriosityManager
@@ -70,15 +71,10 @@ class JupiterChat:
             return default_prompt
     
     def load_user_data(self):
-        """Load user data from file"""
-        if os.path.exists(self.user_data_file):
-            with open(self.user_data_file, 'r', encoding='utf-8') as f:
-                try:
-                    return json.load(f)
-                except json.JSONDecodeError:
-                    return {}
-        else:
-            return {}
+        """Load user data from file using DataManager"""
+        from data_manager import DataManager
+        data_manager = DataManager(self)
+        return data_manager.load_user_data()
     
     def save_user_data(self):
         """Save user data to file"""
@@ -232,32 +228,100 @@ class JupiterChat:
         return full_message
     
     def send_to_kobold(self, message):
-        """Send message to KoboldCPP and return response"""
-        try:
-            payload = {
-                "prompt": message,
-                "max_length": 200,
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "top_k": 40,
-                "rep_pen": 1.1,
-                "stop": ["User:", self.get_user_prefix(), "Jupiter:"]
-            }
-            
-            endpoint = f"{self.kobold_api_url}/api/v1/generate"
-            response = requests.post(endpoint, json=payload, timeout=60)
-            
-            if response.status_code == 200:
-                response_json = response.json()
-                if 'results' in response_json and len(response_json['results']) > 0:
-                    return response_json['results'][0]['text'].strip()
-                else:
-                    return "Error: Unexpected response format from KoboldCPP API."
-            else:
-                return f"Error: Could not connect to KoboldCPP API (Status: {response.status_code})."
+        """Send message to KoboldCPP and return response with improved error handling"""
+        max_retries = 3
+        retry_count = 0
+        backoff_time = 1  # Start with 1 second delay between retries
+        
+        while retry_count < max_retries:
+            try:
+                # Prepare the payload for the API
+                payload = {
+                    "prompt": message,
+                    "max_length": 200,
+                    "temperature": 0.7,
+                    "top_p": 0.9,
+                    "top_k": 40,
+                    "rep_pen": 1.1,
+                    "stop": ["User:", self.get_user_prefix(), "Jupiter:"]
+                }
                 
-        except Exception as e:
-            return f"Error communicating with KoboldCPP: {str(e)}"
+                # Create endpoint URL
+                endpoint = f"{self.kobold_api_url}/api/v1/generate"
+                
+                # Log attempt (optional)
+                print(f"Sending request to KoboldCPP API (attempt {retry_count + 1}/{max_retries})")
+                
+                # Send the request with timeout
+                response = requests.post(endpoint, json=payload, timeout=60)
+                
+                # Check response status
+                if response.status_code == 200:
+                    # Successful response - parse and return
+                    response_json = response.json()
+                    if 'results' in response_json and len(response_json['results']) > 0:
+                        return response_json['results'][0]['text'].strip()
+                    else:
+                        print("Warning: Unexpected API response format")
+                        return "I received an unexpected response format. Let me try to phrase things differently."
+                
+                elif response.status_code >= 500:
+                    # Server error - can retry
+                    print(f"Server error from API: {response.status_code}")
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        print(f"Waiting {backoff_time}s before retry...")
+                        time.sleep(backoff_time)
+                        backoff_time *= 2  # Exponential backoff
+                        continue
+                    return "I'm having server issues right now. Please try again in a moment."
+                
+                elif response.status_code == 429:
+                    # Rate limited - wait longer
+                    print("Rate limited by API")
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        backoff_time = 5  # Longer wait for rate limits
+                        print(f"Waiting {backoff_time}s before retry...")
+                        time.sleep(backoff_time)
+                        continue
+                    return "I'm getting too many requests right now. Let's try again in a minute."
+                
+                else:
+                    # Other error - log and fail
+                    print(f"API error: {response.status_code}")
+                    try:
+                        print(f"Error details: {response.text}")
+                    except:
+                        pass
+                    return f"I encountered an error (code: {response.status_code}). Please check your KoboldCPP server."
+                    
+            except requests.exceptions.Timeout:
+                print("Request timed out")
+                retry_count += 1
+                if retry_count < max_retries:
+                    print(f"Waiting {backoff_time}s before retry...")
+                    time.sleep(backoff_time)
+                    backoff_time *= 2
+                    continue
+                return "The response is taking too long. Please check if your KoboldCPP server is overloaded."
+                
+            except requests.exceptions.ConnectionError:
+                print("Connection error - KoboldCPP server may be down")
+                return "I can't connect to the language model. Please verify that KoboldCPP is running properly."
+                
+            except Exception as e:
+                print(f"Unexpected error: {str(e)}")
+                retry_count += 1
+                if retry_count < max_retries:
+                    print(f"Waiting {backoff_time}s before retry...")
+                    time.sleep(backoff_time)
+                    backoff_time *= 2
+                    continue
+                return "I encountered an unexpected error. Please check your system logs for details."
+        
+        # If we get here, all retries failed
+        return "After multiple attempts, I couldn't get a valid response from the language model. Please check your KoboldCPP configuration."
     
     def start_new_log(self):
         """Create new log file for session"""
@@ -345,3 +409,45 @@ class JupiterChat:
                     
                     # Add to history
                     self.conversation_history.append(f"Jupiter: {curious_question}")
+                    
+    def read_log_file(self, log_file_path):
+        """Safely read and parse a log file"""
+        # Check if file exists
+        if not os.path.exists(log_file_path):
+            print(f"Warning: Log file {log_file_path} does not exist")
+            return []
+        
+        try:
+            with open(log_file_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+            
+            # Check if file is empty or only contains header
+            if not content:
+                print(f"Warning: Log file {log_file_path} is empty")
+                return []
+            
+            lines = content.split('\n')
+            if len(lines) <= 1:
+                print(f"Warning: Log file {log_file_path} only contains header")
+                return []
+            
+            # Parse messages from log
+            messages = []
+            current_message = None
+            
+            for line in lines[1:]:  # Skip header line
+                if line.strip():  # Skip empty lines
+                    timestamp_match = re.match(r'\[(.*?)\] (User:|Jupiter:) (.*)', line)
+                    if timestamp_match:
+                        timestamp, role, text = timestamp_match.groups()
+                        messages.append({
+                            'timestamp': timestamp,
+                            'role': role.strip(':'),
+                            'text': text
+                        })
+            
+            return messages
+        
+        except Exception as e:
+            print(f"Error reading log file {log_file_path}: {str(e)}")
+            return []
