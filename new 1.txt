@@ -1,0 +1,41 @@
+TO DO
+Test weather command with and without internet access too
+test timer command, including with names and multiple timers - further testing needed. When it lists timers, it lists them in total seconds, and its not saying the active timers. Also test 'minute and a half'.
+
+To be developed more - speaker identification
+install pyannote-audio
+
+
+Changes
+
+Future ideas
+Way to upvote/downvote last message, and store it somewhere special for future processing
+encryption of context, prompts
+voice recognition
+Image of AI pop up when speaking, hidden cmd
+Full access to offline wikipedia
+Secure input access
+Picovoice for wake word
+Create a way for Jupiter to go through the context and see if they've learned anything about the user
+Basic GUI notifications
+
+
+Absolutely! Let's find a name that perfectly captures both **Jupiter** and **Saturn**, reflecting their identities as the female and male voices of your home AI assistant. Since both are majestic gas giants and hold significant places in our solar system, perhaps a name that embodies their celestial nature would be fitting.
+
+Here are some concise suggestions:
+
+1. **Orbit**  
+   A single word that signifies the path of celestial bodies. It represents connection and harmony between the two.
+
+13. **Jusan**  
+    Combining *Ju* from Jupiter and *San* from Saturn.
+
+14. **Jusa**  
+    A fusion of the beginnings of both names.
+
+15. **Jovian**  
+    Relates to Jupiter but can represent both in a broader celestial context.
+
+Given your preference for a **short phrase or single word**, I think **"Orbit"**, **"Cosmo"**, or **"Astra"** could be excellent choices. They’re brief, meaningful, and carry the cosmic theme that's intrinsic to both Jupiter and Saturn.
+
+Do any of these resonate with you? I'm happy to delve deeper or explore more options if you'd like!
