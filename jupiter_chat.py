@@ -8,6 +8,8 @@ import json
 from colorama import init, Fore, Style
 
 from curiosity_manager import CuriosityManager
+from initial_greeting import initial_greeting
+from improved_info_extraction import extract_personal_info
 
 # Initialize colorama
 init()
@@ -31,12 +33,22 @@ class JupiterChat:
         self.conversation_history = []
         self.current_log_file = None
         
+        # Define colors as instance variables for external access
+        self.JUPITER_COLOR = JUPITER_COLOR
+        self.USER_COLOR = USER_COLOR
+        self.Style = Style
+        
         # Create folders if they don't exist
         os.makedirs(prompt_folder, exist_ok=True)
         os.makedirs(logs_folder, exist_ok=True)
         
-        # Load user data
-        self.user_data = self.load_user_data()
+        # Create an empty user_data file if it doesn't exist
+        if not os.path.exists(user_data_file):
+            with open(user_data_file, 'w', encoding='utf-8') as f:
+                json.dump({}, f)
+        
+        # Initialize empty user data
+        self.user_data = {}
         
         # Create curiosity manager
         self.curiosity = CuriosityManager(self)
@@ -71,116 +83,50 @@ class JupiterChat:
             return default_prompt
     
     def load_user_data(self):
-        """Load user data from file using DataManager"""
-        from data_manager import DataManager
-        data_manager = DataManager(self)
-        return data_manager.load_user_data()
+        """Load user data from file"""
+        if os.path.exists(self.user_data_file):
+            with open(self.user_data_file, 'r', encoding='utf-8') as f:
+                try:
+                    return json.load(f)
+                except json.JSONDecodeError:
+                    return {}
+        else:
+            return {}
     
     def save_user_data(self):
         """Save user data to file"""
+        # Get the full data structure
+        data = self.load_user_data()
+        
+        # Make sure known_users exists
+        if 'known_users' not in data:
+            data['known_users'] = {}
+        
+        # Get the user's name
+        if 'name' in self.user_data:
+            # Update the user's data in the known_users section
+            data['known_users'][self.user_data['name']] = self.user_data
+        
+        # Save the entire structure
         with open(self.user_data_file, 'w', encoding='utf-8') as f:
-            json.dump(self.user_data, f, indent=4)
+            json.dump(data, f, indent=4)
     
-    def extract_personal_info(self, message):
-        """Extract personal info from message"""
-        personal_info_shared = False
+    def update_user_data(self, message):
+        """Update user data using improved extraction"""
+        # Extract info using the improved function
+        updates, personal_info_shared = extract_personal_info(message, self.user_data)
         
-        # Name extraction
-        name_match = re.search(r"(?:my name is|I am|I'm|call me) ([A-Z][a-z]+ [A-Z][a-z]+|[A-Z][a-z]+)", 
-                               message, re.IGNORECASE)
-        if name_match:
-            self.user_data['name'] = name_match.group(1)
-            personal_info_shared = True
-        
-        # Location extraction
-        location_match = re.search(r"(?:I live in|I'm from|I am from|my location is) ([A-Za-z]+(?: [A-Za-z]+)*)", 
-                                  message, re.IGNORECASE)
-        if location_match:
-            self.user_data['location'] = location_match.group(1)
-            personal_info_shared = True
-        
-        # Nationality extraction
-        nationality_match = re.search(r"(?:I am|I'm) (?:from|a native of|a citizen of) ([A-Za-z]+(?: [A-Za-z]+)*)",
-                                    message, re.IGNORECASE)
-        if nationality_match:
-            self.user_data['nationality'] = nationality_match.group(1)
-            personal_info_shared = True
-        
-        # Professional field extraction
-        profession_match = re.search(r"(?:I work in|I am in|I'm in|my field is|my profession is) ([A-Za-z]+(?: [A-Za-z]+)*)", 
-                                    message, re.IGNORECASE)
-        if profession_match:
-            self.user_data['professional_field'] = profession_match.group(1)
-            personal_info_shared = True
-        
-        # Active projects extraction
-        project_match = re.search(r"(?:I am|I'm) (?:working on|developing|building|creating) ([A-Za-z]+(?: [A-Za-z]+)*)", 
-                                 message, re.IGNORECASE)
-        if project_match:
-            project = project_match.group(1).strip()
-            if 'active_projects' not in self.user_data:
-                self.user_data['active_projects'] = []
-            
-            # Add project if not already in list
-            project_entry = {
-                "name": project,
-                "mentioned_date": datetime.datetime.now().strftime("%Y-%m-%d")
-            }
-            
-            # Check if project already exists
-            existing_projects = [p["name"].lower() for p in self.user_data['active_projects']]
-            if project.lower() not in existing_projects:
-                self.user_data['active_projects'].append(project_entry)
-                personal_info_shared = True
-        
-        # Goals extraction
-        goals_match = re.search(r"(?:my goal is|I want to|I'm trying to|I aim to) ([^.]+)", 
-                               message, re.IGNORECASE)
-        if goals_match:
-            goal = goals_match.group(1).strip()
-            if 'goals' not in self.user_data:
-                self.user_data['goals'] = []
-            
-            # Add goal if not already in list
-            if goal not in self.user_data['goals']:
-                self.user_data['goals'].append(goal)
-                personal_info_shared = True
-        
-        # Challenges extraction
-        challenge_match = re.search(r"(?:I'm struggling with|my challenge is|I'm having trouble with|I'm finding it difficult to) ([^.]+)", 
-                                   message, re.IGNORECASE)
-        if challenge_match:
-            challenge = challenge_match.group(1).strip()
-            if 'challenges' not in self.user_data:
-                self.user_data['challenges'] = []
-            
-            # Add challenge if not already in list
-            if challenge not in self.user_data['challenges']:
-                self.user_data['challenges'].append(challenge)
-                personal_info_shared = True
-        
-        # Family extraction
-        family_match = re.search(r"(?:my|I have a) (?:wife|husband|partner|child|son|daughter|brother|sister|mom|dad) ([^.]+)", 
-                                message, re.IGNORECASE)
-        if family_match:
-            family_info = family_match.group(0).strip()
-            if 'family' not in self.user_data:
-                self.user_data['family'] = []
-            
-            # Add family info if not already in list
-            if family_info not in self.user_data['family']:
-                self.user_data['family'].append(family_info)
-                personal_info_shared = True
-        
-        # Save extracted information
-        if self.user_data:
+        # Update user_data with any new information
+        if updates:
+            self.user_data.update(updates)
             self.save_user_data()
-        
-        # Update curiosity manager with new knowledge
-        self.curiosity.update_known_info()
-        
-        # Update trust level based on message and info shared
-        self.curiosity.update_trust_level(len(message), personal_info_shared)
+            
+            # Update curiosity manager with new knowledge
+            self.curiosity.update_known_info()
+            
+            # Update trust level if personal info was shared
+            if personal_info_shared:
+                self.curiosity.update_trust_level(len(message), personal_info_shared)
         
         return personal_info_shared
     
@@ -228,100 +174,32 @@ class JupiterChat:
         return full_message
     
     def send_to_kobold(self, message):
-        """Send message to KoboldCPP and return response with improved error handling"""
-        max_retries = 3
-        retry_count = 0
-        backoff_time = 1  # Start with 1 second delay between retries
-        
-        while retry_count < max_retries:
-            try:
-                # Prepare the payload for the API
-                payload = {
-                    "prompt": message,
-                    "max_length": 200,
-                    "temperature": 0.7,
-                    "top_p": 0.9,
-                    "top_k": 40,
-                    "rep_pen": 1.1,
-                    "stop": ["User:", self.get_user_prefix(), "Jupiter:"]
-                }
-                
-                # Create endpoint URL
-                endpoint = f"{self.kobold_api_url}/api/v1/generate"
-                
-                # Log attempt (optional)
-                print(f"Sending request to KoboldCPP API (attempt {retry_count + 1}/{max_retries})")
-                
-                # Send the request with timeout
-                response = requests.post(endpoint, json=payload, timeout=60)
-                
-                # Check response status
-                if response.status_code == 200:
-                    # Successful response - parse and return
-                    response_json = response.json()
-                    if 'results' in response_json and len(response_json['results']) > 0:
-                        return response_json['results'][0]['text'].strip()
-                    else:
-                        print("Warning: Unexpected API response format")
-                        return "I received an unexpected response format. Let me try to phrase things differently."
-                
-                elif response.status_code >= 500:
-                    # Server error - can retry
-                    print(f"Server error from API: {response.status_code}")
-                    retry_count += 1
-                    if retry_count < max_retries:
-                        print(f"Waiting {backoff_time}s before retry...")
-                        time.sleep(backoff_time)
-                        backoff_time *= 2  # Exponential backoff
-                        continue
-                    return "I'm having server issues right now. Please try again in a moment."
-                
-                elif response.status_code == 429:
-                    # Rate limited - wait longer
-                    print("Rate limited by API")
-                    retry_count += 1
-                    if retry_count < max_retries:
-                        backoff_time = 5  # Longer wait for rate limits
-                        print(f"Waiting {backoff_time}s before retry...")
-                        time.sleep(backoff_time)
-                        continue
-                    return "I'm getting too many requests right now. Let's try again in a minute."
-                
+        """Send message to KoboldCPP and return response"""
+        try:
+            payload = {
+                "prompt": message,
+                "max_length": 200,
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "top_k": 40,
+                "rep_pen": 1.1,
+                "stop": ["User:", self.get_user_prefix(), "Jupiter:"]
+            }
+            
+            endpoint = f"{self.kobold_api_url}/api/v1/generate"
+            response = requests.post(endpoint, json=payload, timeout=60)
+            
+            if response.status_code == 200:
+                response_json = response.json()
+                if 'results' in response_json and len(response_json['results']) > 0:
+                    return response_json['results'][0]['text'].strip()
                 else:
-                    # Other error - log and fail
-                    print(f"API error: {response.status_code}")
-                    try:
-                        print(f"Error details: {response.text}")
-                    except:
-                        pass
-                    return f"I encountered an error (code: {response.status_code}). Please check your KoboldCPP server."
-                    
-            except requests.exceptions.Timeout:
-                print("Request timed out")
-                retry_count += 1
-                if retry_count < max_retries:
-                    print(f"Waiting {backoff_time}s before retry...")
-                    time.sleep(backoff_time)
-                    backoff_time *= 2
-                    continue
-                return "The response is taking too long. Please check if your KoboldCPP server is overloaded."
+                    return "Error: Unexpected response format from KoboldCPP API."
+            else:
+                return f"Error: Could not connect to KoboldCPP API (Status: {response.status_code})."
                 
-            except requests.exceptions.ConnectionError:
-                print("Connection error - KoboldCPP server may be down")
-                return "I can't connect to the language model. Please verify that KoboldCPP is running properly."
-                
-            except Exception as e:
-                print(f"Unexpected error: {str(e)}")
-                retry_count += 1
-                if retry_count < max_retries:
-                    print(f"Waiting {backoff_time}s before retry...")
-                    time.sleep(backoff_time)
-                    backoff_time *= 2
-                    continue
-                return "I encountered an unexpected error. Please check your system logs for details."
-        
-        # If we get here, all retries failed
-        return "After multiple attempts, I couldn't get a valid response from the language model. Please check your KoboldCPP configuration."
+        except Exception as e:
+            return f"Error communicating with KoboldCPP: {str(e)}"
     
     def start_new_log(self):
         """Create new log file for session"""
@@ -329,7 +207,7 @@ class JupiterChat:
         self.current_log_file = os.path.join(self.logs_folder, f"jupiter_chat_{timestamp}.log")
         
         with open(self.current_log_file, 'w', encoding='utf-8') as f:
-            f.write(f"=== Jupiter Chat: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n\n")
+            f.write(f"=== Jupiter Chat Session: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n\n")
     
     def log_message(self, role, message):
         """Log message to current log file"""
@@ -341,9 +219,14 @@ class JupiterChat:
     def run(self):
         """Run chat interface"""
         print("=== Jupiter Chat ===")
-        print("Type 'exit' or 'quit' to end the conversation.")
         
+        # Start logging
         self.start_new_log()
+        
+        # Handle initial greeting and user identification
+        initial_greeting(self)
+        
+        print("Type 'exit' or 'quit' to end the conversation.")
         
         while True:
             # Get user input with colored prefix
@@ -355,8 +238,10 @@ class JupiterChat:
                 print(f"{JUPITER_COLOR}Jupiter:{Style.RESET_ALL} Ending chat session. Goodbye!")
                 break
             
-            # Extract personal info and log
-            self.extract_personal_info(user_input)
+            # Update user data with any extracted info
+            self.update_user_data(user_input)
+            
+            # Log user message
             self.log_message(user_prefix, user_input)
             
             # Add to history
@@ -409,45 +294,3 @@ class JupiterChat:
                     
                     # Add to history
                     self.conversation_history.append(f"Jupiter: {curious_question}")
-                    
-    def read_log_file(self, log_file_path):
-        """Safely read and parse a log file"""
-        # Check if file exists
-        if not os.path.exists(log_file_path):
-            print(f"Warning: Log file {log_file_path} does not exist")
-            return []
-        
-        try:
-            with open(log_file_path, 'r', encoding='utf-8') as f:
-                content = f.read().strip()
-            
-            # Check if file is empty or only contains header
-            if not content:
-                print(f"Warning: Log file {log_file_path} is empty")
-                return []
-            
-            lines = content.split('\n')
-            if len(lines) <= 1:
-                print(f"Warning: Log file {log_file_path} only contains header")
-                return []
-            
-            # Parse messages from log
-            messages = []
-            current_message = None
-            
-            for line in lines[1:]:  # Skip header line
-                if line.strip():  # Skip empty lines
-                    timestamp_match = re.match(r'\[(.*?)\] (User:|Jupiter:) (.*)', line)
-                    if timestamp_match:
-                        timestamp, role, text = timestamp_match.groups()
-                        messages.append({
-                            'timestamp': timestamp,
-                            'role': role.strip(':'),
-                            'text': text
-                        })
-            
-            return messages
-        
-        except Exception as e:
-            print(f"Error reading log file {log_file_path}: {str(e)}")
-            return []

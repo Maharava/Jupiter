@@ -1,0 +1,14 @@
+{
+    "trust_level": 4.5,
+    "name": "in Alice",
+    "goals": [
+        "build an AI friend!"
+    ],
+    "professional_field": "Alice Springs",
+    "known_users": {
+        "Reece": {
+            "name": "Reece",
+            "location": "Canberra, Australia"
+        }
+    }
+}
