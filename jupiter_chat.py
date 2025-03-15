@@ -7,9 +7,8 @@ import re
 import json
 from colorama import init, Fore, Style
 
-from curiosity_manager import CuriosityManager
-from initial_greeting import initial_greeting
-from improved_info_extraction import extract_personal_info
+# Import the InfoExtractor
+from info_extractor import InfoExtractor
 
 # Initialize colorama
 init()
@@ -50,8 +49,12 @@ class JupiterChat:
         # Initialize empty user data
         self.user_data = {}
         
-        # Create curiosity manager
-        self.curiosity = CuriosityManager(self)
+        # Initialize the InfoExtractor
+        self.info_extractor = InfoExtractor(self, kobold_api_url=kobold_api_url)
+        
+        # Process unprocessed logs during startup
+        print("Processing previous conversation logs...")
+        self.info_extractor.process_all_unprocessed_logs()
         
         # Set up token counter
         try:
@@ -111,24 +114,12 @@ class JupiterChat:
         with open(self.user_data_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
     
-    def update_user_data(self, message):
-        """Update user data using improved extraction"""
-        # Extract info using the improved function
-        updates, personal_info_shared = extract_personal_info(message, self.user_data)
-        
-        # Update user_data with any new information
-        if updates:
-            self.user_data.update(updates)
+    def identify_user(self, username=None):
+        """Simple user identification without data extraction"""
+        if username and username.strip():
+            self.user_data['name'] = username.strip()
             self.save_user_data()
-            
-            # Update curiosity manager with new knowledge
-            self.curiosity.update_known_info()
-            
-            # Update trust level if personal info was shared
-            if personal_info_shared:
-                self.curiosity.update_trust_level(len(message), personal_info_shared)
-        
-        return personal_info_shared
+        return self.user_data.get('name', 'User')
     
     def get_user_prefix(self):
         """Return user prefix based on known name"""
@@ -138,22 +129,8 @@ class JupiterChat:
         """Prepare complete message for LLM with history and prompt"""
         system_prompt = self.load_system_prompt()
         
-        # Get LLM curiosity prompt if appropriate
-        curiosity_prompt = ""
-        if self.curiosity.should_ask_question() and random.random() < 0.5:  # 50% chance of LLM question vs direct
-            curiosity_prompt = self.curiosity.get_llm_curiosity_prompt()
-            if curiosity_prompt:
-                self.curiosity.messages_since_last_question = 0
-                self.curiosity.questions_this_session += 1
-        
-        # Add curiosity instruction to system prompt if needed
-        if curiosity_prompt:
-            full_prompt = f"{system_prompt}\n\n{curiosity_prompt}"
-        else:
-            full_prompt = system_prompt
-        
         # Combine system prompt and history
-        full_message = full_prompt + "\n\n"
+        full_message = system_prompt + "\n\n"
         for msg in self.conversation_history:
             full_message += msg + "\n"
         
@@ -166,7 +143,7 @@ class JupiterChat:
                 self.conversation_history.pop(0)  # Remove oldest message
                 
                 # Rebuild message
-                full_message = full_prompt + "\n\n"
+                full_message = system_prompt + "\n\n"
                 for msg in self.conversation_history:
                     full_message += msg + "\n"
                 full_message += f"{self.get_user_prefix()} {user_input}\nJupiter:"
@@ -216,6 +193,70 @@ class JupiterChat:
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 f.write(f"[{timestamp}] {role} {message}\n\n")
     
+    def handle_initial_greeting(self):
+        """Simplified initial greeting to only identify the user"""
+        # Check if any users exist in the system
+        data = self.load_user_data()
+        
+        if 'known_users' in data and data['known_users']:
+            # We have returning users, ask if they're returning
+            print(f"{self.JUPITER_COLOR}Jupiter:{self.Style.RESET_ALL} Hi there! Have we talked before? (yes/no)")
+            response = input(f"{self.USER_COLOR}User:{self.Style.RESET_ALL} ").strip().lower()
+            
+            if response in ['yes', 'y', 'yeah', 'yep', 'yup']:
+                # Ask for name to identify returning user
+                print(f"{self.JUPITER_COLOR}Jupiter:{self.Style.RESET_ALL} Great to see you again! What's your name so I can load your information?")
+                name = input(f"{self.USER_COLOR}User:{self.Style.RESET_ALL} ").strip()
+                
+                # Try to find user in known_users
+                if 'known_users' in data:
+                    matching_users = [u for u in data['known_users'] if u.lower() == name.lower()]
+                    if matching_users:
+                        # Use the proper capitalization of the name
+                        name = matching_users[0]
+                        # Load user data
+                        self.user_data = data['known_users'][name].copy()
+                        self.identify_user(name)
+                        
+                        print(f"{self.JUPITER_COLOR}Jupiter:{self.Style.RESET_ALL} Welcome back, {name}! It's great to chat with you again.")
+                        return
+                
+                print(f"{self.JUPITER_COLOR}Jupiter:{self.Style.RESET_ALL} I don't seem to have a record for that name. Let's start fresh!")
+                # Continue to new user flow
+            else:
+                print(f"{self.JUPITER_COLOR}Jupiter:{self.Style.RESET_ALL} No problem! Let's get to know each other.")
+                # Continue to new user flow
+        
+        # New user flow - ask for name only
+        print(f"{self.JUPITER_COLOR}Jupiter:{self.Style.RESET_ALL} I'm Jupiter, your AI assistant. What's your name?")
+        name = input(f"{self.USER_COLOR}User:{self.Style.RESET_ALL} ").strip()
+        
+        # Set up new user with just a name
+        self.identify_user(name)
+        print(f"{self.JUPITER_COLOR}Jupiter:{self.Style.RESET_ALL} Nice to meet you, {name}! How can I help you today?")
+    
+    def handle_user_commands(self, user_input):
+        """Handle special user commands for managing identity"""
+        if user_input.startswith('/name '):
+            # Command to change username
+            new_name = user_input[6:].strip()
+            if new_name:
+                self.identify_user(new_name)
+                return f"I'll call you {new_name} from now on."
+            else:
+                return "Please provide a name after the /name command."
+        
+        elif user_input == '/help':
+            # Show available commands
+            return """
+Available commands:
+/name [new name] - Change your name
+/help - Show this help message
+            """
+        
+        # Not a command, return None to continue normal processing
+        return None
+    
     def run(self):
         """Run chat interface"""
         print("=== Jupiter Chat ===")
@@ -224,22 +265,26 @@ class JupiterChat:
         self.start_new_log()
         
         # Handle initial greeting and user identification
-        initial_greeting(self)
+        self.handle_initial_greeting()
         
         print("Type 'exit' or 'quit' to end the conversation.")
         
         while True:
             # Get user input with colored prefix
             user_prefix = self.get_user_prefix()
-            user_input = input(f"{USER_COLOR}{user_prefix}{Style.RESET_ALL} ")
+            user_input = input(f"{self.USER_COLOR}{user_prefix}{self.Style.RESET_ALL} ")
             
             # Check for exit command
             if user_input.lower() in ['exit', 'quit']:
-                print(f"{JUPITER_COLOR}Jupiter:{Style.RESET_ALL} Ending chat session. Goodbye!")
+                print(f"{self.JUPITER_COLOR}Jupiter:{self.Style.RESET_ALL} Ending chat session. Goodbye!")
                 break
             
-            # Update user data with any extracted info
-            self.update_user_data(user_input)
+            # Check for user commands
+            command_response = self.handle_user_commands(user_input)
+            if command_response:
+                print(f"{self.JUPITER_COLOR}Jupiter:{self.Style.RESET_ALL} {command_response}")
+                self.log_message("Jupiter:", command_response)
+                continue
             
             # Log user message
             self.log_message(user_prefix, user_input)
@@ -252,45 +297,8 @@ class JupiterChat:
             response = self.send_to_kobold(llm_message)
             
             # Print and log response with color
-            print(f"{JUPITER_COLOR}Jupiter:{Style.RESET_ALL} {response}")
+            print(f"{self.JUPITER_COLOR}Jupiter:{self.Style.RESET_ALL} {response}")
             self.log_message("Jupiter:", response)
             
             # Add to history
             self.conversation_history.append(f"Jupiter: {response}")
-            
-            # Increment messages since last question
-            self.curiosity.messages_since_last_question += 1
-            
-            # Check for date mentions that might need follow-up
-            date_mention = self.curiosity.check_for_date_mentions(user_input)
-            if date_mention and 'important_dates' not in self.user_data:
-                date_follow_up = self.curiosity.generate_date_follow_up(date_mention)
-                
-                # Small delay to make it feel natural
-                time.sleep(1.5)
-                
-                # Print and log follow-up question
-                print(f"{JUPITER_COLOR}Jupiter:{Style.RESET_ALL} {date_follow_up}")
-                self.log_message("Jupiter:", date_follow_up)
-                
-                # Add to history
-                self.conversation_history.append(f"Jupiter: {date_follow_up}")
-                
-                # Reset curiosity counters
-                self.curiosity.messages_since_last_question = 0
-                self.curiosity.questions_this_session += 1
-                continue
-            
-            # Maybe ask a direct curious question
-            if self.curiosity.should_ask_question():
-                curious_question = self.curiosity.generate_direct_question()
-                if curious_question:
-                    # Small delay to make it feel natural
-                    time.sleep(1.5)
-                    
-                    # Print and log curious question
-                    print(f"{JUPITER_COLOR}Jupiter:{Style.RESET_ALL} {curious_question}")
-                    self.log_message("Jupiter:", curious_question)
-                    
-                    # Add to history
-                    self.conversation_history.append(f"Jupiter: {curious_question}")
