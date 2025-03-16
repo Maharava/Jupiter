@@ -230,10 +230,54 @@ Available commands:
         self.user_model.save_current_user()
         self.ui.print_jupiter_message(f"Nice to meet you, {name}! How can I help you today?")
     
+    def restart_chat(self):
+        """Restart the chat session while preserving user data"""
+        # Log that we're restarting
+        self.logger.log_message("System:", "Chat session restarted by user")
+        
+        # Save current log file
+        current_log = self.logger.get_current_log_file()
+        
+        # Start a new log file
+        self.logger.start_new_log()
+        
+        # Clear conversation history
+        self.conversation_history = []
+        
+        # Clear the UI if it's a GUI
+        if hasattr(self.ui, 'clear_chat'):
+            self.ui.clear_chat()
+            self.ui.set_status("Restarting chat...", True)
+        
+        # Show welcome message
+        self.ui.print_jupiter_message("=== Jupiter Chat Restarted ===")
+        self.ui.print_jupiter_message(f"Hello again, {self.user_model.current_user.get('name', 'User')}! How can I help you today?")
+        
+        # Reset status if it's a GUI
+        if hasattr(self.ui, 'set_status'):
+            self.ui.set_status("Ready")
+    
+    def show_knowledge(self):
+        """Show knowledge base information (placeholder for now)"""
+        if hasattr(self.ui, 'set_status'):
+            self.ui.set_status("Loading knowledge...", True)
+            
+        # Display memory information for now
+        knowledge_info = self.format_memory_display()
+        self.ui.print_jupiter_message(knowledge_info)
+        
+        if hasattr(self.ui, 'set_status'):
+            self.ui.set_status("Ready")
+    
     def run(self):
         """Run the chat interface"""
         # Print welcome message
         self.ui.print_welcome()
+        
+        # Set up button callbacks if using GUI
+        if hasattr(self.ui, 'set_restart_callback'):
+            self.ui.set_restart_callback(self.restart_chat)
+            self.ui.set_knowledge_callback(self.show_knowledge)
         
         # Show processing status if GUI is used
         if hasattr(self.ui, 'set_status'):

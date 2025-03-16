@@ -27,6 +27,10 @@ class GUIInterface:
         # User info
         self.user_prefix = "User"
         
+        # Button callbacks
+        self.restart_callback = None
+        self.knowledge_callback = None
+        
         # Start GUI in a separate thread
         self.gui_thread = threading.Thread(target=self._run_gui)
         self.gui_thread.daemon = True
@@ -76,6 +80,36 @@ class GUIInterface:
                     pass
             except Exception as e:
                 print(f"Failed to load icon: {e}")
+        
+        # Create button frame at the top
+        button_frame = tk.Frame(self.root, bg="black")
+        button_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Create Restart button
+        restart_button = tk.Button(
+            button_frame,
+            text="Restart",
+            bg="#333",
+            fg="white",
+            relief=tk.FLAT,
+            padx=10,
+            pady=2,
+            command=self._handle_restart
+        )
+        restart_button.pack(side=tk.LEFT, padx=5)
+        
+        # Create Knowledge button
+        knowledge_button = tk.Button(
+            button_frame,
+            text="Knowledge",
+            bg="#333",
+            fg="white",
+            relief=tk.FLAT,
+            padx=10,
+            pady=2,
+            command=self._handle_knowledge
+        )
+        knowledge_button.pack(side=tk.LEFT, padx=5)
         
         # Create chat display
         chat_frame = tk.Frame(self.root, bg="black")
@@ -188,6 +222,28 @@ class GUIInterface:
         # Start GUI event loop
         self.root.mainloop()
     
+    def _handle_restart(self):
+        """Handle restart button click"""
+        if self.restart_callback:
+            self.restart_callback()
+        else:
+            self.print_jupiter_message("Restart functionality not yet implemented.")
+    
+    def _handle_knowledge(self):
+        """Handle knowledge button click"""
+        if self.knowledge_callback:
+            self.knowledge_callback()
+        else:
+            self.print_jupiter_message("Knowledge functionality not yet implemented.")
+    
+    def set_restart_callback(self, callback):
+        """Set the callback for restart button"""
+        self.restart_callback = callback
+    
+    def set_knowledge_callback(self, callback):
+        """Set the callback for knowledge button"""
+        self.knowledge_callback = callback
+    
     def _get_color(self, color_name, alpha=1.0):
         """Convert color name to hex with optional alpha simulation"""
         # Basic color mapping
@@ -234,6 +290,8 @@ class GUIInterface:
                     self._update_user_prefix(message["prefix"])
                 elif message["type"] == "status":
                     self._update_status(message["text"], message.get("color", "#4CAF50"))
+                elif message["type"] == "clear":
+                    self._clear_chat()
                 
                 # Mark as done
                 self.output_queue.task_done()
@@ -296,6 +354,22 @@ class GUIInterface:
         if self.root:
             self.root.after(0, update_display)
     
+    def _clear_chat(self):
+        """Clear the chat display"""
+        def update_display():
+            # Enable editing
+            self.chat_text.config(state=tk.NORMAL)
+            
+            # Clear all text
+            self.chat_text.delete(1.0, tk.END)
+            
+            # Disable editing
+            self.chat_text.config(state=tk.DISABLED)
+        
+        # Schedule on main thread
+        if self.root:
+            self.root.after(0, update_display)
+    
     def _update_user_prefix(self, prefix):
         """Update the user prefix in the GUI"""
         def update():
@@ -325,6 +399,10 @@ class GUIInterface:
     def print_jupiter_message(self, message):
         """Print a message from Jupiter with correct color"""
         self.output_queue.put({"type": "jupiter", "text": message})
+    
+    def clear_chat(self):
+        """Clear the chat display"""
+        self.output_queue.put({"type": "clear"})
     
     def get_user_input(self, prefix="User"):
         """Get input from user with correct color"""
@@ -359,8 +437,9 @@ class GUIInterface:
         self.print_jupiter_message("=== Jupiter Chat ===")
     
     def print_exit_instructions(self):
-        """Print exit instructions"""
-        self.print_jupiter_message("Type 'exit' or 'quit' to end the conversation.")
+        """Print exit instructions - does nothing in GUI mode"""
+        # Skip displaying exit instructions in GUI mode
+        pass
     
     def handle_exit_command(self, user_input):
         """Check if user wants to exit"""
