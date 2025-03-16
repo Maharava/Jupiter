@@ -91,7 +91,7 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
     
     def get_unprocessed_logs(self):
         """Get list of log files that haven't been processed yet"""
-        # Get all log files
+        # Get all log files (only .log format)
         all_logs = []
         for file in os.listdir(self.logs_folder):
             if file.startswith("jupiter_chat_") and file.endswith(".log"):
@@ -107,27 +107,30 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
         messages = []
         user_prefix = None
         
-        with open(log_file, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-            
-            for line in lines:
-                # Skip empty lines and the header
-                if not line.strip() or "===" in line:
-                    continue
+        try:
+            with open(log_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
                 
-                # Parse log line format: [timestamp] Role: Message
-                match = re.search(r'\[(.*?)\] (.*?):(.*)', line)
-                if match:
-                    timestamp, role, message = match.groups()
-                    role = role.strip()
-                    message = message.strip()
+                for line in lines:
+                    # Skip empty lines and the header
+                    if not line.strip() or "===" in line:
+                        continue
                     
-                    if role != "Jupiter:" and role != "InfoExtractor:" and role != "InfoExtractor Error:":
-                        user_prefix = role
-                    
-                    # Only include actual conversation messages
-                    if role == "Jupiter:" or (user_prefix and role == user_prefix):
-                        messages.append(f"{role} {message}")
+                    # Parse log line format: [timestamp] Role: Message
+                    match = re.search(r'\[(.*?)\] (.*?):(.*)', line)
+                    if match:
+                        timestamp, role, message = match.groups()
+                        role = role.strip()
+                        message = message.strip()
+                        
+                        if role != "Jupiter:" and role != "InfoExtractor:" and role != "InfoExtractor Error:":
+                            user_prefix = role
+                        
+                        # Only include actual conversation messages
+                        if role == "Jupiter:" or (user_prefix and role == user_prefix):
+                            messages.append(f"{role} {message}")
+        except Exception as e:
+            print(f"InfoExtractor Error: Failed to read log file {log_file}: {str(e)}")
         
         return messages
     

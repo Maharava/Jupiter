@@ -1,5 +1,6 @@
 import os
 import datetime
+import glob
 
 class Logger:
     """Handles logging of chat sessions and messages"""
@@ -11,6 +12,27 @@ class Logger:
         
         # Create logs folder if it doesn't exist
         os.makedirs(logs_folder, exist_ok=True)
+        
+        # Clean up any duplicate .txt logs
+        self._clean_duplicate_logs()
+    
+    def _clean_duplicate_logs(self):
+        """Remove any .txt log files that have matching .log files"""
+        # Get lists of both types of log files
+        log_files = set(glob.glob(os.path.join(self.logs_folder, "jupiter_chat_*.log")))
+        txt_files = set(glob.glob(os.path.join(self.logs_folder, "jupiter_chat_*.txt")))
+        
+        # Find txt files with matching log files
+        for txt_file in txt_files:
+            base_name = os.path.splitext(txt_file)[0]
+            log_file = base_name + ".log"
+            
+            if log_file in log_files:
+                try:
+                    os.remove(txt_file)
+                    print(f"Removed duplicate log file: {txt_file}")
+                except OSError as e:
+                    print(f"Error removing duplicate log file {txt_file}: {e}")
     
     def start_new_log(self):
         """Create new log file for session"""

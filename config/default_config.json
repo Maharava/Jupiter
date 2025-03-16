@@ -2,7 +2,7 @@
     "llm": {
         "provider": "ollama",
         "api_url": "http://localhost:11434",
-        "default_model": "llama3",
+        "default_model": "gemma3",
         "chat_temperature": 0.7,
         "extraction_temperature": 0.2,
         "token_limit": 8192

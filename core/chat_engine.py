@@ -93,7 +93,7 @@ Available commands:
         self.logger.start_new_log()
         
         # Ask for name
-        self.ui.print_jupiter_message("I'm Jupiter, your AI assistant. Please ONLY type your name in. Consider it a username.")
+        self.ui.print_jupiter_message("I'm Jupiter, your AI assistant. Please enter your name. Please ONLY type your name in. Consider it a username.")
         
         while True:
             name = self.ui.get_user_input()

@@ -8,12 +8,31 @@ except ImportError:
     USE_TIKTOKEN = False
 
 def count_tokens(text):
-    """Count tokens in text"""
+    """
+    Count tokens in text with improved fallback when tiktoken is not available.
+    This uses a more accurate heuristic based on GPT tokenization patterns.
+    """
     if USE_TIKTOKEN:
         return len(TOKENIZER.encode(text))
     else:
-        # Simple approximation
-        return len(re.findall(r'\w+|[^\w\s]', text))
+        # More accurate approximation than simple word splitting
+        # GPT tokenizers generally split on whitespace, punctuation, and subword units
+        
+        # 1. Count words (including contractions as single tokens)
+        words = re.findall(r'\b[\w\']+\b', text)
+        word_count = len(words)
+        
+        # 2. Count punctuation and special characters that become separate tokens
+        punctuation = re.findall(r'[^\w\s]', text)
+        punct_count = len(punctuation)
+        
+        # 3. Add adjustment for long words that will be split into multiple tokens
+        # Most tokenizers split words around 4-6 characters
+        long_word_chars = sum(max(0, len(word) - 5) for word in words)
+        long_word_adjustment = long_word_chars // 4  # Approximate additional tokens
+        
+        # 4. Calculate final count
+        return word_count + punct_count + long_word_adjustment
 
 def truncate_to_token_limit(text, history, system_prompt, token_limit):
     """Truncate history to fit within token limit"""
