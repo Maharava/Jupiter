@@ -35,9 +35,42 @@ class ChatEngine:
                 f.write(default_prompt)
             return default_prompt
     
+    def format_user_information(self):
+        """Format known user information for inclusion in system prompt"""
+        user_info = self.user_model.current_user
+        
+        if not user_info or len(user_info) <= 1:  # Only contains name
+            return ""
+            
+        # Start with header
+        formatted_info = "\n\n## What You Know About The User\n"
+        
+        # Basic identity information
+        formatted_info += f"- Name: {user_info.get('name', 'Unknown')}\n"
+        
+        # Add other information categories
+        for category, value in user_info.items():
+            # Skip name as it's already added
+            if category == 'name':
+                continue
+                
+            # Format lists (likes, interests, etc.)
+            if isinstance(value, list) and value:
+                formatted_info += f"- {category.capitalize()}: {', '.join(value)}\n"
+            # Format simple key-value pairs
+            elif value and not isinstance(value, list):
+                formatted_info += f"- {category.capitalize()}: {value}\n"
+        
+        return formatted_info
+    
     def prepare_message_for_llm(self, user_input):
         """Prepare complete message for LLM with history and prompt"""
         system_prompt = self.load_system_prompt()
+        
+        # Add user information to system prompt
+        user_info = self.format_user_information()
+        enhanced_system_prompt = system_prompt + user_info
+        
         user_prefix = f"{self.user_model.current_user.get('name', 'User')}:"
         
         # Add current user input
@@ -47,12 +80,12 @@ class ChatEngine:
         preserved_history = truncate_to_token_limit(
             current_input, 
             self.conversation_history,
-            system_prompt,
+            enhanced_system_prompt,
             self.config['llm']['token_limit']
         )
         
         # Build the full message
-        full_message = system_prompt + "\n\n"
+        full_message = enhanced_system_prompt + "\n\n"
         for msg in preserved_history:
             full_message += msg + "\n"
         full_message += current_input
@@ -62,6 +95,65 @@ class ChatEngine:
     def get_user_prefix(self):
         """Return user prefix based on known name"""
         return f"{self.user_model.current_user.get('name', 'User')}:"
+    
+    def format_memory_display(self):
+        """Format user memory information for display to the user"""
+        user_info = self.user_model.current_user
+        
+        # Start with header
+        memory_display = "Here's what I remember about you:\n\n"
+        
+        if not user_info or len(user_info) <= 1:  # Only contains name
+            memory_display += "I don't have much information about you yet beyond your name.\n"
+            return memory_display
+            
+        # Group information by categories
+        categories = {
+            "Basic Information": ["name", "age", "gender", "location", "profession"],
+            "Preferences": ["likes", "dislikes", "interests", "hobbies"],
+            "Context": ["family", "goals", "important_dates"]
+        }
+        
+        # Track which keys we've processed
+        processed_keys = set()
+        
+        # Add information by category groups
+        for category_group, keys in categories.items():
+            # Check if we have any information in this category
+            has_info = any(key in user_info for key in keys)
+            
+            if has_info:
+                memory_display += f"## {category_group}\n"
+                
+                for key in keys:
+                    if key in user_info and user_info[key]:
+                        processed_keys.add(key)
+                        
+                        # Format lists (likes, interests, etc.)
+                        if isinstance(user_info[key], list) and user_info[key]:
+                            memory_display += f"- {key.capitalize()}: {', '.join(user_info[key])}\n"
+                        # Format simple key-value pairs
+                        elif user_info[key] and not isinstance(user_info[key], list):
+                            memory_display += f"- {key.capitalize()}: {user_info[key]}\n"
+                
+                memory_display += "\n"
+        
+        # Add any remaining information that wasn't in the predefined categories
+        remaining_keys = [key for key in user_info.keys() if key not in processed_keys]
+        
+        if remaining_keys:
+            memory_display += "## Other Information\n"
+            
+            for key in remaining_keys:
+                if user_info[key]:
+                    # Format lists
+                    if isinstance(user_info[key], list) and user_info[key]:
+                        memory_display += f"- {key.capitalize()}: {', '.join(user_info[key])}\n"
+                    # Format simple key-value pairs
+                    elif user_info[key] and not isinstance(user_info[key], list):
+                        memory_display += f"- {key.capitalize()}: {user_info[key]}\n"
+        
+        return memory_display
     
     def handle_user_commands(self, user_input):
         """Handle special user commands for managing identity"""
@@ -76,11 +168,16 @@ class ChatEngine:
             else:
                 return "Please provide a name after the /name command."
         
+        elif user_input == '/memory':
+            # Show what Jupiter remembers about the user
+            return self.format_memory_display()
+        
         elif user_input == '/help':
             # Show available commands
             return """
 Available commands:
 /name [new name] - Change your name
+/memory - Show what I remember about you
 /help - Show this help message
             """
         
@@ -138,11 +235,19 @@ Available commands:
         # Print welcome message
         self.ui.print_welcome()
         
+        # Show processing status if GUI is used
+        if hasattr(self.ui, 'set_status'):
+            self.ui.set_status("Processing logs...", True)
+            
         # Handle initial greeting and user identification
         self.handle_initial_greeting()
         
         # Print exit instructions
         self.ui.print_exit_instructions()
+        
+        # Reset status
+        if hasattr(self.ui, 'set_status'):
+            self.ui.set_status("Ready")
         
         # Main chat loop
         while True:
@@ -154,11 +259,20 @@ Available commands:
             if self.ui.handle_exit_command(user_input):
                 break
             
+            # Set busy status
+            if hasattr(self.ui, 'set_status'):
+                self.ui.set_status("Processing your request...", True)
+            
             # Check for user commands
             command_response = self.handle_user_commands(user_input)
             if command_response:
                 self.ui.print_jupiter_message(command_response)
                 self.logger.log_message("Jupiter:", command_response)
+                
+                # Reset status
+                if hasattr(self.ui, 'set_status'):
+                    self.ui.set_status("Ready")
+                    
                 continue
             
             # Log user message
@@ -166,6 +280,10 @@ Available commands:
             
             # Add to history
             self.conversation_history.append(f"{user_prefix} {user_input}")
+            
+            # Update status to show Jupiter is generating a response
+            if hasattr(self.ui, 'set_status'):
+                self.ui.set_status("Thinking...", True)
             
             # Prepare and send to LLM
             llm_message = self.prepare_message_for_llm(user_input)
@@ -180,3 +298,7 @@ Available commands:
             
             # Add to history
             self.conversation_history.append(f"Jupiter: {response}")
+            
+            # Reset status
+            if hasattr(self.ui, 'set_status'):
+                self.ui.set_status("Ready")

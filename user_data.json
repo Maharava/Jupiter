@@ -1,7 +1,24 @@
 {
     "known_users": {
         "Reece": {
-            "name": "Reece"
+            "name": "Reece",
+            "likes": [
+                "terraforming Mars",
+                "teal"
+            ],
+            "interests": [
+                "atmospheric pressure"
+            ]
+        },
+        "Silas": {
+            "name": "Silas",
+            "likes": [
+                "terraforming Mars",
+                "teal"
+            ],
+            "interests": [
+                "atmospheric pressure"
+            ]
         }
     }
 }
