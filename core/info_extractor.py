@@ -10,12 +10,13 @@ class InfoExtractor:
     Processes logs during startup and ensures each log is only processed once.
     """
     
-    def __init__(self, llm_client, user_model, logs_folder, prompt_folder):
+    def __init__(self, llm_client, user_model, logs_folder, prompt_folder, test_mode=False):
         """Initialize the info extractor"""
         self.llm_client = llm_client
         self.user_model = user_model
         self.logs_folder = logs_folder
         self.prompt_folder = prompt_folder
+        self.test_mode = test_mode
         
         # Load extraction prompt
         self.extraction_prompt = self.load_extraction_prompt()
@@ -25,6 +26,9 @@ class InfoExtractor:
         
         # Initialize processed logs tracking
         self.processed_logs = self.load_processed_logs()
+        
+        if self.test_mode:
+            print(f"🧪 InfoExtractor initialized in TEST MODE - No log processing will occur")
     
     def load_extraction_prompt(self):
         """Load the information extraction prompt from file or create default"""
@@ -192,6 +196,11 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
     
     def process_log_file(self, log_file):
         """Process a single log file and extract information"""
+        if self.test_mode:
+            print(f"TEST MODE: Skipping log processing for {os.path.basename(log_file)}")
+            self.mark_log_as_processed(log_file)
+            return
+            
         print(f"InfoExtractor: Processing log file {os.path.basename(log_file)}")
         
         # Read messages from log
@@ -242,6 +251,10 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
     
     def process_all_unprocessed_logs(self):
         """Process all unprocessed log files"""
+        if self.test_mode:
+            print("TEST MODE: Skipping log processing")
+            return
+            
         # Get unprocessed logs
         unprocessed_logs = self.get_unprocessed_logs()
         

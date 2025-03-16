@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import scrolledtext, PhotoImage
+from tkinter import scrolledtext, PhotoImage, simpledialog, ttk
 import os
 import threading
 import queue
@@ -16,6 +16,7 @@ class GUIInterface:
         # Communication queues for thread-safe operation
         self.input_queue = queue.Queue()
         self.output_queue = queue.Queue()
+        self.knowledge_edit_queue = queue.Queue()
         
         # Threading event for synchronization
         self.input_ready = threading.Event()
@@ -23,6 +24,9 @@ class GUIInterface:
         
         # Flag to check if GUI is still running
         self.is_running = True
+        
+        # Current view state
+        self.current_view = "chat"  # can be "chat" or "knowledge"
         
         # User info
         self.user_prefix = "User"
@@ -111,13 +115,13 @@ class GUIInterface:
         )
         knowledge_button.pack(side=tk.LEFT, padx=5)
         
-        # Create chat display
-        chat_frame = tk.Frame(self.root, bg="black")
-        chat_frame.pack(fill=tk.BOTH, expand=True)
+        # Create chat frame (initially visible)
+        self.chat_frame = tk.Frame(self.root, bg="black")
+        self.chat_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Create scrollable text area
+        # Create scrollable text area for chat
         self.chat_text = scrolledtext.ScrolledText(
-            chat_frame,
+            self.chat_frame,
             wrap=tk.WORD,
             bg="black",
             fg="white",
@@ -141,6 +145,9 @@ class GUIInterface:
         self.chat_text.tag_configure("user_bubble", background=self._get_color(self.user_color, 0.7), 
                                     foreground="white", relief=tk.SOLID, borderwidth=1, lmargin1=10, lmargin2=10, 
                                     rmargin=10, spacing1=3, spacing3=3)
+        
+        # Create knowledge frame (initially hidden)
+        self.create_knowledge_view()
         
         # Create input area
         input_frame = tk.Frame(self.root, bg="black")
@@ -178,7 +185,7 @@ class GUIInterface:
         self.text_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         # Create send button
-        send_button = tk.Button(
+        self.send_button = tk.Button(
             input_frame,
             text="Send",
             bg="#333",
@@ -187,7 +194,19 @@ class GUIInterface:
             padx=5,
             pady=2
         )
-        send_button.pack(side=tk.RIGHT, padx=(5, 0))
+        self.send_button.pack(side=tk.RIGHT, padx=(5, 0))
+        
+        # Create close button (initially hidden)
+        self.close_button = tk.Button(
+            input_frame,
+            text="Close",
+            bg="#333",
+            fg="white",
+            relief=tk.FLAT,
+            padx=5,
+            pady=2,
+            command=self.show_chat_view
+        )
         
         # Handle send button click and Enter key
         def send_message(event=None):
@@ -205,7 +224,7 @@ class GUIInterface:
                 # Focus on text entry
                 self.text_entry.focus_set()
         
-        send_button.config(command=send_message)
+        self.send_button.config(command=send_message)
         self.text_entry.bind("<Return>", send_message)
         
         # Set initial focus
@@ -221,6 +240,535 @@ class GUIInterface:
         
         # Start GUI event loop
         self.root.mainloop()
+    
+    def create_knowledge_view(self):
+        """Create the knowledge view with a scrollable canvas"""
+        self.knowledge_frame = tk.Frame(self.root, bg="black")
+        
+        # Create canvas with scrollbar for resizable content
+        self.knowledge_canvas = tk.Canvas(self.knowledge_frame, bg="black", highlightthickness=0)
+        scrollbar = tk.Scrollbar(self.knowledge_frame, orient="vertical", command=self.knowledge_canvas.yview)
+        
+        # Configure canvas scrolling
+        self.knowledge_canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.knowledge_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Create frame inside canvas for content
+        self.knowledge_content = tk.Frame(self.knowledge_canvas, bg="black")
+        self.knowledge_canvas_window = self.knowledge_canvas.create_window((0, 0), window=self.knowledge_content, anchor="nw")
+        
+        # Add resize listeners
+        self.knowledge_content.bind("<Configure>", self._on_knowledge_content_configure)
+        self.knowledge_canvas.bind("<Configure>", self._on_knowledge_canvas_configure)
+    
+    def _on_knowledge_content_configure(self, event):
+        """Update the canvas scroll region when content size changes"""
+        self.knowledge_canvas.configure(scrollregion=self.knowledge_canvas.bbox("all"))
+    
+    def _on_knowledge_canvas_configure(self, event):
+        """Update the width of the window to match canvas width"""
+        self.knowledge_canvas.itemconfig(self.knowledge_canvas_window, width=event.width)
+    
+    def show_knowledge_view(self):
+        """Switch to knowledge view"""
+        if self.current_view == "knowledge":
+            return
+            
+        self.chat_frame.pack_forget()  # Hide chat
+        self.knowledge_frame.pack(fill=tk.BOTH, expand=True)  # Show knowledge
+        
+        # Change button in input area
+        self.send_button.pack_forget()
+        self.close_button.pack(side=tk.RIGHT, padx=(5, 0))
+        
+        # Update state
+        self.current_view = "knowledge"
+        
+        # Update status
+        self.set_status("Viewing Knowledge", False)
+    
+    def show_chat_view(self):
+        """Switch back to chat view"""
+        if self.current_view == "chat":
+            return
+            
+        self.knowledge_frame.pack_forget()  # Hide knowledge
+        self.chat_frame.pack(fill=tk.BOTH, expand=True)  # Show chat
+        
+        # Change button in input area
+        self.close_button.pack_forget()
+        self.send_button.pack(side=tk.RIGHT, padx=(5, 0))
+        
+        # Update state
+        self.current_view = "chat"
+        
+        # Process any knowledge edits
+        self.process_knowledge_edits()
+        
+        # Update status
+        self.set_status("Ready", False)
+    
+    def create_knowledge_bubbles(self, user_data):
+        """Create knowledge bubbles from user data"""
+        # Clear existing bubbles
+        for widget in self.knowledge_content.winfo_children():
+            widget.destroy()
+        
+        # Add title
+        title_label = tk.Label(
+            self.knowledge_content,
+            text="User Knowledge",
+            bg="black",
+            fg="white",
+            font=("Helvetica", 12, "bold")
+        )
+        title_label.pack(pady=(10, 20))
+        
+        # Skip empty user data
+        if not user_data or len(user_data) <= 1:  # Only contains name
+            no_data_label = tk.Label(
+                self.knowledge_content,
+                text="No knowledge available about this user yet.",
+                bg="black",
+                fg="white",
+                font=("Helvetica", 10)
+            )
+            no_data_label.pack(pady=10)
+            return
+        
+        # Group categories
+        basic_info = ["name", "age", "gender", "location", "profession"]
+        preferences = ["likes", "dislikes", "interests", "hobbies"]
+        context = ["family", "goals", "important_dates"]
+        
+        # Track processed keys
+        processed_keys = set()
+        
+        # Add section header for Basic Information
+        has_basic = any(key in user_data for key in basic_info)
+        if has_basic:
+            section_label = tk.Label(
+                self.knowledge_content,
+                text="Basic Information",
+                bg="black",
+                fg="white",
+                font=("Helvetica", 11, "bold")
+            )
+            section_label.pack(anchor=tk.W, padx=10, pady=(10, 5))
+            
+            # Create bubbles for basic info
+            for key in basic_info:
+                if key in user_data and user_data[key]:
+                    processed_keys.add(key)
+                    self.create_knowledge_bubble(key, user_data[key])
+        
+        # Add section header for Preferences
+        has_preferences = any(key in user_data for key in preferences)
+        if has_preferences:
+            section_label = tk.Label(
+                self.knowledge_content,
+                text="Preferences",
+                bg="black",
+                fg="white",
+                font=("Helvetica", 11, "bold")
+            )
+            section_label.pack(anchor=tk.W, padx=10, pady=(20, 5))
+            
+            # Create bubbles for preferences
+            for key in preferences:
+                if key in user_data and user_data[key]:
+                    processed_keys.add(key)
+                    if isinstance(user_data[key], list):
+                        self.create_list_bubble(key, user_data[key])
+                    else:
+                        self.create_knowledge_bubble(key, user_data[key])
+        
+        # Add section header for Context
+        has_context = any(key in user_data for key in context)
+        if has_context:
+            section_label = tk.Label(
+                self.knowledge_content,
+                text="Context",
+                bg="black",
+                fg="white",
+                font=("Helvetica", 11, "bold")
+            )
+            section_label.pack(anchor=tk.W, padx=10, pady=(20, 5))
+            
+            # Create bubbles for context
+            for key in context:
+                if key in user_data and user_data[key]:
+                    processed_keys.add(key)
+                    if isinstance(user_data[key], list):
+                        self.create_list_bubble(key, user_data[key])
+                    else:
+                        self.create_knowledge_bubble(key, user_data[key])
+        
+        # Add section for other information
+        remaining_keys = [key for key in user_data.keys() if key not in processed_keys]
+        if remaining_keys:
+            section_label = tk.Label(
+                self.knowledge_content,
+                text="Other Information",
+                bg="black",
+                fg="white",
+                font=("Helvetica", 11, "bold")
+            )
+            section_label.pack(anchor=tk.W, padx=10, pady=(20, 5))
+            
+            # Create bubbles for remaining keys
+            for key in remaining_keys:
+                if user_data[key]:
+                    if isinstance(user_data[key], list):
+                        self.create_list_bubble(key, user_data[key])
+                    else:
+                        self.create_knowledge_bubble(key, user_data[key])
+        
+        # Add some padding at the bottom
+        bottom_padding = tk.Frame(self.knowledge_content, height=20, bg="black")
+        bottom_padding.pack(fill=tk.X)
+    
+    def create_knowledge_bubble(self, category, value):
+        """Create a single knowledge bubble for simple values"""
+        # Skip name as it's handled differently
+        if category == 'name':
+            return
+            
+        bubble = tk.Frame(self.knowledge_content, bg=self._get_color(self.jupiter_color, 0.7), 
+                        relief=tk.SOLID, bd=1)
+        bubble.pack(fill=tk.X, padx=10, pady=5)
+        
+        # Content frame with padding
+        content_frame = tk.Frame(bubble, bg=bubble["bg"], padx=10, pady=10)
+        content_frame.pack(fill=tk.X)
+        
+        # Category label
+        category_label = tk.Label(
+            content_frame, 
+            text=category.capitalize(), 
+            font=("Helvetica", 10, "bold"), 
+            bg=bubble["bg"]
+        )
+        category_label.pack(anchor=tk.W)
+        
+        # Value label
+        value_label = tk.Label(
+            content_frame, 
+            text=str(value), 
+            bg=bubble["bg"],
+            wraplength=350  # Allow wrapping for long text
+        )
+        value_label.pack(anchor=tk.W, pady=(2, 0))
+        
+        # Control buttons frame
+        controls = tk.Frame(content_frame, bg=bubble["bg"])
+        controls.pack(anchor=tk.SE, pady=(5, 0))
+        
+        # Edit button with pencil symbol ✏️
+        edit_btn = tk.Button(
+            controls, 
+            text="✏️", 
+            bg=bubble["bg"], 
+            bd=0,
+            font=("Helvetica", 9),
+            command=lambda: self.edit_knowledge(category, value)
+        )
+        edit_btn.pack(side=tk.LEFT, padx=2)
+        
+        # Remove button with X symbol ❌
+        remove_btn = tk.Button(
+            controls, 
+            text="❌", 
+            bg=bubble["bg"], 
+            bd=0,
+            font=("Helvetica", 9),
+            command=lambda: self.remove_knowledge(category)
+        )
+        remove_btn.pack(side=tk.LEFT, padx=2)
+    
+    def create_list_bubble(self, category, items):
+        """Create a bubble for list values with tag/chip display"""
+        bubble = tk.Frame(self.knowledge_content, bg=self._get_color(self.jupiter_color, 0.7), 
+                        relief=tk.SOLID, bd=1)
+        bubble.pack(fill=tk.X, padx=10, pady=5)
+        
+        # Content frame with padding
+        content_frame = tk.Frame(bubble, bg=bubble["bg"], padx=10, pady=10)
+        content_frame.pack(fill=tk.X)
+        
+        # Header with category name
+        header = tk.Frame(content_frame, bg=bubble["bg"])
+        header.pack(fill=tk.X, pady=(0, 5))
+        
+        category_label = tk.Label(
+            header, 
+            text=category.capitalize(), 
+            font=("Helvetica", 10, "bold"), 
+            bg=bubble["bg"]
+        )
+        category_label.pack(side=tk.LEFT)
+        
+        # Container for tag chips
+        tags_container = tk.Frame(content_frame, bg=bubble["bg"])
+        tags_container.pack(fill=tk.X)
+        
+        # Frame to hold each row of tags
+        current_row = tk.Frame(tags_container, bg=bubble["bg"])
+        current_row.pack(fill=tk.X, pady=(0, 2))
+        
+        row_width = 0
+        max_width = 320  # Approximate max width for tags in a row
+        
+        # Create a chip for each item
+        for item in items:
+            # Create test label to measure width
+            test_label = tk.Label(self.root, text=item)
+            item_width = test_label.winfo_reqwidth() + 35  # Add space for X button and padding
+            test_label.destroy()
+            
+            # Check if we need a new row
+            if row_width + item_width > max_width:
+                current_row = tk.Frame(tags_container, bg=bubble["bg"])
+                current_row.pack(fill=tk.X, pady=(0, 2))
+                row_width = 0
+            
+            # Create tag chip
+            tag_chip = tk.Frame(current_row, bg="#555", bd=0, padx=5, pady=2)
+            tag_chip.pack(side=tk.LEFT, padx=2, pady=2)
+            
+            # Tag text
+            tag_text = tk.Label(tag_chip, text=item, fg="white", bg="#555")
+            tag_text.pack(side=tk.LEFT)
+            
+            # Remove button for tag
+            remove_tag_btn = tk.Button(
+                tag_chip, 
+                text="×", 
+                bg="#555", 
+                fg="white", 
+                bd=0,
+                font=("Helvetica", 9),
+                command=lambda i=item: self.remove_list_item(category, i)
+            )
+            remove_tag_btn.pack(side=tk.LEFT)
+            
+            # Update row width
+            row_width += item_width
+        
+        # Add new item button in a separate row
+        button_row = tk.Frame(tags_container, bg=bubble["bg"])
+        button_row.pack(fill=tk.X, pady=(2, 0))
+        
+        add_btn = tk.Button(
+            button_row, 
+            text="➕ Add Item", 
+            bg="#333", 
+            fg="white",
+            relief=tk.FLAT,
+            padx=5,
+            pady=2,
+            font=("Helvetica", 8),
+            command=lambda: self.add_list_item(category)
+        )
+        add_btn.pack(side=tk.LEFT, pady=2)
+        
+        # Control buttons frame for the entire list
+        controls = tk.Frame(content_frame, bg=bubble["bg"])
+        controls.pack(anchor=tk.SE, pady=(5, 0))
+        
+        # Remove all button with X symbol ❌
+        remove_btn = tk.Button(
+            controls, 
+            text="❌ Remove All", 
+            bg=bubble["bg"], 
+            bd=0,
+            font=("Helvetica", 8),
+            command=lambda: self.remove_knowledge(category)
+        )
+        remove_btn.pack(side=tk.LEFT, padx=2)
+    
+    def edit_knowledge(self, category, current_value):
+        """Edit a knowledge item"""
+        # Different editors based on category type
+        if category in ['important_dates']:
+            new_value = self.show_date_picker(category, current_value)
+        elif category in ['age']:
+            new_value = self.show_number_editor(category, current_value)
+        else:
+            new_value = self.show_text_editor(category, current_value)
+        
+        if new_value is not None and new_value != current_value:
+            # Queue the edit for processing
+            self.knowledge_edit_queue.put({
+                "action": "edit",
+                "category": category,
+                "old_value": current_value,
+                "new_value": new_value
+            })
+            
+            # Update UI immediately for better UX
+            for widget in self.knowledge_content.winfo_children():
+                if isinstance(widget, tk.Frame) and widget.winfo_children():
+                    for child in widget.winfo_children():
+                        if isinstance(child, tk.Frame):
+                            # Look for category label
+                            for subchild in child.winfo_children():
+                                if isinstance(subchild, tk.Label) and subchild.cget("text") == category.capitalize():
+                                    # Find value label
+                                    for value_widget in child.winfo_children():
+                                        if isinstance(value_widget, tk.Label) and value_widget.cget("text") == str(current_value):
+                                            value_widget.config(text=str(new_value))
+                                            return
+    
+    def remove_knowledge(self, category):
+        """Remove a knowledge item"""
+        # Ask for confirmation
+        if not self.show_confirm_dialog(f"Remove {category.capitalize()}?", 
+                                       f"Are you sure you want to remove {category.capitalize()}?"):
+            return
+        
+        # Queue the removal for processing
+        self.knowledge_edit_queue.put({
+            "action": "remove",
+            "category": category
+        })
+        
+        # Remove from UI immediately for better UX
+        for widget in self.knowledge_content.winfo_children():
+            if isinstance(widget, tk.Frame):
+                # Check if this frame contains the category we want to remove
+                for child in widget.winfo_children():
+                    if isinstance(child, tk.Frame):
+                        for subchild in child.winfo_children():
+                            if isinstance(subchild, tk.Label) and subchild.cget("text") == category.capitalize():
+                                # Found the bubble to remove
+                                widget.destroy()
+                                return
+    
+    def add_list_item(self, category):
+        """Add an item to a list"""
+        new_item = self.show_text_editor(f"Add to {category}", "")
+        if new_item:
+            # Queue the addition for processing
+            self.knowledge_edit_queue.put({
+                "action": "add_list_item",
+                "category": category,
+                "value": new_item
+            })
+            
+            # Update UI - easiest to just refresh the whole knowledge view
+            self.refresh_knowledge_view()
+    
+    def remove_list_item(self, category, item):
+        """Remove an item from a list"""
+        # Queue the removal for processing
+        self.knowledge_edit_queue.put({
+            "action": "remove_list_item",
+            "category": category,
+            "value": item
+        })
+        
+        # Update UI - easiest to just refresh the whole knowledge view
+        self.refresh_knowledge_view()
+    
+    def show_text_editor(self, category, current_value):
+        """Show dialog for editing text values"""
+        return simpledialog.askstring(
+            f"Edit {category.capitalize()}", 
+            f"Enter new value for {category.capitalize()}:",
+            initialvalue=current_value,
+            parent=self.root
+        )
+    
+    def show_number_editor(self, category, current_value):
+        """Show dialog for editing number values"""
+        try:
+            current_number = int(current_value)
+        except (ValueError, TypeError):
+            current_number = 0
+            
+        result = simpledialog.askinteger(
+            f"Edit {category.capitalize()}", 
+            f"Enter new value for {category.capitalize()}:",
+            initialvalue=current_number,
+            parent=self.root
+        )
+        
+        return str(result) if result is not None else None
+    
+    def show_date_picker(self, category, current_value):
+        """Show dialog for editing date values"""
+        # For simplicity, we'll use a text editor but could be enhanced with a proper date picker
+        return self.show_text_editor(category, current_value)
+    
+    def show_confirm_dialog(self, title, message):
+        """Show a confirmation dialog"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.grab_set()  # Modal window
+        dialog.resizable(False, False)
+        
+        # Set dialog position relative to main window
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 150
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 50
+        dialog.geometry(f"300x120+{x}+{y}")
+        
+        # Message
+        msg_label = tk.Label(dialog, text=message, wraplength=280, pady=10)
+        msg_label.pack(fill=tk.X, padx=10)
+        
+        # Buttons frame
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Result variable
+        result = [False]  # Using a list as a mutable container
+        
+        # Confirm button
+        confirm_btn = tk.Button(
+            btn_frame,
+            text="Yes",
+            bg="#333",
+            fg="white",
+            relief=tk.FLAT,
+            padx=10,
+            pady=2,
+            command=lambda: [result.append(True), dialog.destroy()]
+        )
+        confirm_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Cancel button
+        cancel_btn = tk.Button(
+            btn_frame,
+            text="No",
+            bg="#333",
+            fg="white",
+            relief=tk.FLAT,
+            padx=10,
+            pady=2,
+            command=dialog.destroy
+        )
+        cancel_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+        
+        return len(result) > 1 and result[1]
+    
+    def refresh_knowledge_view(self):
+        """Refresh the knowledge view with updated data"""
+        if self.knowledge_callback:
+            self.knowledge_callback()
+    
+    def process_knowledge_edits(self):
+        """Process all queued knowledge edits"""
+        # Just a placeholder - actual implementation would update the user model
+        while not self.knowledge_edit_queue.empty():
+            edit = self.knowledge_edit_queue.get()
+            # In a real implementation, this would be passed to the chat engine
+            # which would update the user model
+            print(f"Processing knowledge edit: {edit}")
     
     def _handle_restart(self):
         """Handle restart button click"""

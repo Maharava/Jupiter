@@ -7,13 +7,14 @@ from utils.text_processing import count_tokens, truncate_to_token_limit
 class ChatEngine:
     """Core chat functionality for Jupiter"""
     
-    def __init__(self, llm_client, user_model, logger, ui, config):
+    def __init__(self, llm_client, user_model, logger, ui, config, test_mode=False):
         """Initialize chat engine with dependencies"""
         self.llm_client = llm_client
         self.user_model = user_model
         self.logger = logger
         self.ui = ui
         self.config = config
+        self.test_mode = test_mode
         
         # Initialize conversation history
         self.conversation_history = []
@@ -21,16 +22,30 @@ class ChatEngine:
         # Create necessary folders
         os.makedirs(config['paths']['prompt_folder'], exist_ok=True)
         os.makedirs(config['paths']['logs_folder'], exist_ok=True)
+        
+        if self.test_mode:
+            print(f"🧪 ChatEngine initialized in TEST MODE")
     
     def load_system_prompt(self):
         """Load system prompt from file"""
         system_prompt_path = os.path.join(self.config['paths']['prompt_folder'], "system_prompt.txt")
         if os.path.exists(system_prompt_path):
             with open(system_prompt_path, 'r', encoding='utf-8') as f:
-                return f.read()
+                prompt = f.read()
+                
+                # Add test mode notice if in test mode
+                if self.test_mode:
+                    prompt += "\n\n## TEST MODE\nYou are currently running in offline test mode. No LLM backend is being used."
+                    
+                return prompt
         else:
             # Create default prompt if none exists
             default_prompt = "You are Jupiter, a helpful AI assistant."
+            
+            # Add test mode notice if in test mode
+            if self.test_mode:
+                default_prompt += "\n\n## TEST MODE\nYou are currently running in offline test mode. No LLM backend is being used."
+            
             with open(system_prompt_path, 'w', encoding='utf-8') as f:
                 f.write(default_prompt)
             return default_prompt
@@ -103,6 +118,10 @@ class ChatEngine:
         # Start with header
         memory_display = "Here's what I remember about you:\n\n"
         
+        # In test mode, add a notice
+        if self.test_mode:
+            memory_display = "TEST MODE: Here's what I remember about you (from test data):\n\n"
+        
         if not user_info or len(user_info) <= 1:  # Only contains name
             memory_display += "I don't have much information about you yet beyond your name.\n"
             return memory_display
@@ -174,12 +193,18 @@ class ChatEngine:
         
         elif user_input == '/help':
             # Show available commands
-            return """
+            help_text = """
 Available commands:
 /name [new name] - Change your name
 /memory - Show what I remember about you
 /help - Show this help message
             """
+            
+            # Add test mode info
+            if self.test_mode:
+                help_text += "\n⚠️ TEST MODE is active - running without LLM backend\n"
+                
+            return help_text
         
         # Not a command, return None to continue normal processing
         return None
@@ -189,8 +214,13 @@ Available commands:
         # Start a new log file
         self.logger.start_new_log()
         
+        # Special test mode greeting if applicable
+        test_mode_notice = ""
+        if self.test_mode:
+            test_mode_notice = " (TEST MODE - No LLM connection)"
+        
         # Ask for name
-        self.ui.print_jupiter_message("I'm Jupiter, your AI assistant. Please enter your name. Please ONLY type your name in. Consider it a username.")
+        self.ui.print_jupiter_message(f"I'm Jupiter{test_mode_notice}, your AI assistant. Please enter your name. Please ONLY type your name in. Consider it a username.")
         
         while True:
             name = self.ui.get_user_input()
@@ -222,13 +252,23 @@ Available commands:
                 user_data = all_user_data['known_users'][actual_name]
                 self.user_model.set_current_user(user_data)
                 
-                self.ui.print_jupiter_message(f"Welcome back, {actual_name}! It's great to chat with you again.")
+                # Greeting with test mode notice if applicable
+                if self.test_mode:
+                    self.ui.print_jupiter_message(f"Welcome back, {actual_name}! It's great to chat with you again. (TEST MODE ACTIVE)")
+                else:
+                    self.ui.print_jupiter_message(f"Welcome back, {actual_name}! It's great to chat with you again.")
+                    
                 return
         
         # New user
         self.user_model.set_current_user({'name': name})
         self.user_model.save_current_user()
-        self.ui.print_jupiter_message(f"Nice to meet you, {name}! How can I help you today?")
+        
+        # Greeting with test mode notice if applicable
+        if self.test_mode:
+            self.ui.print_jupiter_message(f"Nice to meet you, {name}! How can I help you today? (TEST MODE ACTIVE)")
+        else:
+            self.ui.print_jupiter_message(f"Nice to meet you, {name}! How can I help you today?")
     
     def restart_chat(self):
         """Restart the chat session while preserving user data"""
@@ -249,25 +289,94 @@ Available commands:
             self.ui.clear_chat()
             self.ui.set_status("Restarting chat...", True)
         
+        # Special test mode notice if applicable
+        test_mode_notice = ""
+        if self.test_mode:
+            test_mode_notice = " (TEST MODE ACTIVE)"
+        
         # Show welcome message
-        self.ui.print_jupiter_message("=== Jupiter Chat Restarted ===")
+        self.ui.print_jupiter_message(f"=== Jupiter Chat Restarted{test_mode_notice} ===")
         self.ui.print_jupiter_message(f"Hello again, {self.user_model.current_user.get('name', 'User')}! How can I help you today?")
         
         # Reset status if it's a GUI
         if hasattr(self.ui, 'set_status'):
-            self.ui.set_status("Ready")
+            if self.test_mode:
+                self.ui.set_status("TEST MODE - Ready")
+            else:
+                self.ui.set_status("Ready")
     
     def show_knowledge(self):
         """Show knowledge base information (placeholder for now)"""
         if hasattr(self.ui, 'set_status'):
-            self.ui.set_status("Loading knowledge...", True)
+            status_text = "Loading knowledge..."
+            if self.test_mode:
+                status_text = "TEST MODE - " + status_text
+            self.ui.set_status(status_text, True)
             
         # Display memory information for now
         knowledge_info = self.format_memory_display()
         self.ui.print_jupiter_message(knowledge_info)
         
         if hasattr(self.ui, 'set_status'):
-            self.ui.set_status("Ready")
+            if self.test_mode:
+                self.ui.set_status("TEST MODE - Ready", False)
+            else:
+                self.ui.set_status("Ready", False)
+    
+    def process_knowledge_edits(self):
+        """Process knowledge edits from the UI"""
+        # Check if the UI has a knowledge edit queue
+        if not hasattr(self.ui, 'knowledge_edit_queue'):
+            return
+            
+        # Process all edits in the queue
+        while not self.ui.knowledge_edit_queue.empty():
+            edit = self.ui.knowledge_edit_queue.get()
+            
+            # Handle different edit types
+            if edit["action"] == "edit":
+                # Update simple value
+                self.user_model.current_user[edit["category"]] = edit["new_value"]
+                print(f"Updated {edit['category']} from '{edit['old_value']}' to '{edit['new_value']}'")
+                
+            elif edit["action"] == "remove":
+                # Remove category entirely
+                if edit["category"] in self.user_model.current_user:
+                    del self.user_model.current_user[edit["category"]]
+                    print(f"Removed {edit['category']}")
+                    
+            elif edit["action"] == "add_list_item":
+                # Add item to list
+                category = edit["category"]
+                new_item = edit["value"]
+                
+                # Create list if it doesn't exist
+                if category not in self.user_model.current_user:
+                    self.user_model.current_user[category] = []
+                    
+                # Add item if it's not already in the list
+                if new_item not in self.user_model.current_user[category]:
+                    self.user_model.current_user[category].append(new_item)
+                    print(f"Added '{new_item}' to {category}")
+                    
+            elif edit["action"] == "remove_list_item":
+                # Remove item from list
+                category = edit["category"]
+                item = edit["value"]
+                
+                # Remove item if list exists
+                if category in self.user_model.current_user and isinstance(self.user_model.current_user[category], list):
+                    if item in self.user_model.current_user[category]:
+                        self.user_model.current_user[category].remove(item)
+                        print(f"Removed '{item}' from {category}")
+                        
+                    # If list is now empty, remove the category
+                    if not self.user_model.current_user[category]:
+                        del self.user_model.current_user[category]
+                        print(f"Removed empty category {category}")
+        
+        # Save changes to user model
+        self.user_model.save_current_user()
     
     def run(self):
         """Run the chat interface"""
@@ -281,7 +390,10 @@ Available commands:
         
         # Show processing status if GUI is used
         if hasattr(self.ui, 'set_status'):
-            self.ui.set_status("Processing logs...", True)
+            if self.test_mode:
+                self.ui.set_status("TEST MODE - Initializing...", True)
+            else:
+                self.ui.set_status("Processing logs...", True)
             
         # Handle initial greeting and user identification
         self.handle_initial_greeting()
@@ -291,7 +403,10 @@ Available commands:
         
         # Reset status
         if hasattr(self.ui, 'set_status'):
-            self.ui.set_status("Ready")
+            if self.test_mode:
+                self.ui.set_status("TEST MODE - Ready")
+            else:
+                self.ui.set_status("Ready")
         
         # Main chat loop
         while True:
@@ -305,7 +420,10 @@ Available commands:
             
             # Set busy status
             if hasattr(self.ui, 'set_status'):
-                self.ui.set_status("Processing your request...", True)
+                status_text = "Processing your request..."
+                if self.test_mode:
+                    status_text = "TEST MODE - " + status_text
+                self.ui.set_status(status_text, True)
             
             # Check for user commands
             command_response = self.handle_user_commands(user_input)
@@ -315,7 +433,10 @@ Available commands:
                 
                 # Reset status
                 if hasattr(self.ui, 'set_status'):
-                    self.ui.set_status("Ready")
+                    if self.test_mode:
+                        self.ui.set_status("TEST MODE - Ready")
+                    else:
+                        self.ui.set_status("Ready")
                     
                 continue
             
@@ -327,7 +448,10 @@ Available commands:
             
             # Update status to show Jupiter is generating a response
             if hasattr(self.ui, 'set_status'):
-                self.ui.set_status("Thinking...", True)
+                status_text = "Thinking..."
+                if self.test_mode:
+                    status_text = "TEST MODE - " + status_text
+                self.ui.set_status(status_text, True)
             
             # Prepare and send to LLM
             llm_message = self.prepare_message_for_llm(user_input)
@@ -345,4 +469,7 @@ Available commands:
             
             # Reset status
             if hasattr(self.ui, 'set_status'):
-                self.ui.set_status("Ready")
+                if self.test_mode:
+                    self.ui.set_status("TEST MODE - Ready")
+                else:
+                    self.ui.set_status("Ready")

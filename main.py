@@ -1,6 +1,7 @@
 import os
 import json
 import argparse
+import datetime
 
 from models.llm_client import LLMClient
 from models.user_model import UserModel
@@ -44,6 +45,7 @@ def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Jupiter Chat")
     parser.add_argument("--gui", action="store_true", help="Use GUI interface instead of terminal")
+    parser.add_argument("--test", action="store_true", help="Run in offline test mode without LLM backend")
     args = parser.parse_args()
     
     # Load configuration
@@ -52,7 +54,8 @@ def main():
     # Initialize components
     llm_client = LLMClient(
         api_url=config['llm']['api_url'],
-        default_model=config['llm']['default_model']
+        default_model=config['llm']['default_model'],
+        test_mode=args.test  # Pass test mode flag to LLM client
     )
     
     user_model = UserModel(config['paths']['user_data_file'])
@@ -76,29 +79,38 @@ def main():
         os.makedirs(folder, exist_ok=True)
     
     # Display log processing message in GUI if using it
-    if args.gui and hasattr(ui, 'set_status'):
-        ui.set_status("Processing previous conversation logs...", True)
+    if args.test:
+        if args.gui and hasattr(ui, 'set_status'):
+            ui.set_status("Running in TEST MODE - No LLM connection", True)
+        else:
+            print("⚠️ Running in TEST MODE - No LLM connection")
     else:
-        print("Processing previous conversation logs...")
+        if args.gui and hasattr(ui, 'set_status'):
+            ui.set_status("Processing previous conversation logs...", True)
+        else:
+            print("Processing previous conversation logs...")
         
     # Initialize info extractor
     info_extractor = InfoExtractor(
         llm_client=llm_client,
         user_model=user_model,
         logs_folder=config['paths']['logs_folder'],
-        prompt_folder=config['paths']['prompt_folder']
+        prompt_folder=config['paths']['prompt_folder'],
+        test_mode=args.test  # Pass test mode to info extractor
     )
     
-    # Process any unprocessed logs
-    info_extractor.process_all_unprocessed_logs()
+    # Process any unprocessed logs (skip in test mode)
+    if not args.test:
+        info_extractor.process_all_unprocessed_logs()
     
-    # Initialize chat engine
+    # Initialize chat engine with test mode flag
     chat_engine = ChatEngine(
         llm_client=llm_client,
         user_model=user_model,
         logger=logger,
         ui=ui,
-        config=config
+        config=config,
+        test_mode=args.test
     )
     
     # Run chat interface
