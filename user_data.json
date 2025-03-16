@@ -1,24 +1,30 @@
 {
     "known_users": {
-        "Reece": {
-            "name": "Reece",
+        "Jupiter": {
+            "name": "Jupiter",
             "likes": [
                 "terraforming Mars",
                 "teal"
             ],
+            "age": "33",
+            "family": "wife Lauren, son Jason",
             "interests": [
-                "atmospheric pressure"
+                "memory",
+                "neuroscience"
             ]
         },
-        "Silas": {
-            "name": "Silas",
+        "Reece": {
+            "name": "Reece"
+        },
+        "Leo": {
+            "name": "Leo",
             "likes": [
                 "terraforming Mars",
-                "teal"
+                "teal",
+                "space"
             ],
-            "interests": [
-                "atmospheric pressure"
-            ]
+            "age": "33",
+            "family": "wife Lauren, son Jason"
         }
     }
 }

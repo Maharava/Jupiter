@@ -1,12 +1,4 @@
-def _update_user_prefix(self, prefix):
-        """Update the user prefix in the GUI"""
-        def update():
-            if self.user_label:
-                self.user_label.config(text=f"{prefix}:")
-        
-        # Schedule on main thread
-        if self.root:
-            self.root.after(0, update)import tkinter as tk
+import tkinter as tk
 from tkinter import scrolledtext, PhotoImage
 import os
 import threading
@@ -62,8 +54,26 @@ class GUIInterface:
         icon_path = os.path.join(assets_dir, "jupiter.ico")
         if os.path.exists(icon_path):
             try:
-                # For Windows, use iconbitmap
+                # For Windows, set both the window icon and taskbar icon
                 self.root.iconbitmap(icon_path)
+                
+                # Set taskbar icon (Windows specific)
+                try:
+                    # Using ctypes to set the app user model ID for Windows taskbar
+                    import ctypes
+                    myappid = 'jupiter.ai.chat.1.0'  # Arbitrary but unique string
+                    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+                except (ImportError, AttributeError):
+                    pass
+                    
+                # Alternative approach for other platforms
+                try:
+                    png_path = os.path.join(assets_dir, "jupiter.png")
+                    if os.path.exists(png_path):
+                        icon_img = PhotoImage(file=png_path)
+                        self.root.iconphoto(True, icon_img)
+                except:
+                    pass
             except Exception as e:
                 print(f"Failed to load icon: {e}")
         
@@ -183,7 +193,8 @@ class GUIInterface:
         # Basic color mapping
         color_map = {
             "yellow": "#FFEB3B",
-            "purple": "#9C27B0",
+            "red": "#F44336",
+            "purple": "#673AB7",
             "magenta": "#E91E63"
         }
         
@@ -284,6 +295,16 @@ class GUIInterface:
         # Schedule on main thread
         if self.root:
             self.root.after(0, update_display)
+    
+    def _update_user_prefix(self, prefix):
+        """Update the user prefix in the GUI"""
+        def update():
+            if self.user_label:
+                self.user_label.config(text=f"{prefix}:")
+        
+        # Schedule on main thread
+        if self.root:
+            self.root.after(0, update)
     
     def _update_status(self, status_text, color="#4CAF50"):
         """Update the status label in the GUI"""

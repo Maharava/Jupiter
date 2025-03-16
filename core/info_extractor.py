@@ -128,11 +128,11 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
                         
                         # Only include actual conversation messages
                         if role == "Jupiter:" or (user_prefix and role == user_prefix):
-                            messages.append(f"{role} {message}")
+                            messages.append({"role": role, "message": message})
         except Exception as e:
             print(f"InfoExtractor Error: Failed to read log file {log_file}: {str(e)}")
         
-        return messages
+        return messages, user_prefix
     
     def parse_llm_response(self, response):
         """Parse the JSON response from the LLM"""
@@ -195,17 +195,28 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
         print(f"InfoExtractor: Processing log file {os.path.basename(log_file)}")
         
         # Read messages from log
-        messages = self.read_log_file(log_file)
+        messages, user_prefix = self.read_log_file(log_file)
         if not messages:
             print(f"InfoExtractor: No messages found in log file {os.path.basename(log_file)}")
             self.mark_log_as_processed(log_file)
             return
         
-        # Identify username from the log
-        username = self.identify_username_from_log(log_file)
+        # Filter to only include user messages
+        user_messages = []
+        for msg in messages:
+            if msg["role"] != "Jupiter:":
+                user_messages.append(f"{msg['role']} {msg['message']}")
         
-        # Send to LLM for analysis
-        formatted_content = "\n".join(messages)
+        if not user_messages:
+            print(f"InfoExtractor: No user messages found in log file {os.path.basename(log_file)}")
+            self.mark_log_as_processed(log_file)
+            return
+        
+        # Identify username from the log
+        username = user_prefix.rstrip(':') if user_prefix else self.identify_username_from_log(log_file)
+        
+        # Send ONLY user messages to LLM for analysis
+        formatted_content = "\n".join(user_messages)
         llm_response = self.llm_client.extract_information(self.extraction_prompt, formatted_content)
         
         # Parse LLM response
