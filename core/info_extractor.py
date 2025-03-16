@@ -1,7 +1,8 @@
 import os
 import json
+import re
 import datetime
-import requests
+from collections import Counter
 
 class InfoExtractor:
     """
@@ -9,22 +10,25 @@ class InfoExtractor:
     Processes logs during startup and ensures each log is only processed once.
     """
     
-    def __init__(self, jupiter_chat, kobold_api_url="http://localhost:5001"):
-        self.jupiter = jupiter_chat
-        self.kobold_api_url = kobold_api_url
+    def __init__(self, llm_client, user_model, logs_folder, prompt_folder):
+        """Initialize the info extractor"""
+        self.llm_client = llm_client
+        self.user_model = user_model
+        self.logs_folder = logs_folder
+        self.prompt_folder = prompt_folder
         
         # Load extraction prompt
         self.extraction_prompt = self.load_extraction_prompt()
         
         # File to track processed logs
-        self.processed_logs_file = os.path.join(self.jupiter.logs_folder, "processed_logs.json")
+        self.processed_logs_file = os.path.join(logs_folder, "processed_logs.json")
         
         # Initialize processed logs tracking
         self.processed_logs = self.load_processed_logs()
     
     def load_extraction_prompt(self):
         """Load the information extraction prompt from file or create default"""
-        prompt_path = os.path.join(self.jupiter.prompt_folder, "extraction_prompt.txt")
+        prompt_path = os.path.join(self.prompt_folder, "extraction_prompt.txt")
         if os.path.exists(prompt_path):
             with open(prompt_path, 'r', encoding='utf-8') as f:
                 return f.read()
@@ -50,8 +54,13 @@ If you don't find any important information, respond with:
 
 DO NOT include any explanations outside the JSON. ONLY return valid JSON.
 """
+            # Create prompt folder if it doesn't exist
+            os.makedirs(self.prompt_folder, exist_ok=True)
+            
+            # Save default prompt
             with open(prompt_path, 'w', encoding='utf-8') as f:
                 f.write(default_prompt)
+                
             return default_prompt
     
     def load_processed_logs(self):
@@ -84,9 +93,9 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
         """Get list of log files that haven't been processed yet"""
         # Get all log files
         all_logs = []
-        for file in os.listdir(self.jupiter.logs_folder):
+        for file in os.listdir(self.logs_folder):
             if file.startswith("jupiter_chat_") and file.endswith(".log"):
-                all_logs.append(os.path.join(self.jupiter.logs_folder, file))
+                all_logs.append(os.path.join(self.logs_folder, file))
         
         # Filter out already processed logs
         unprocessed_logs = [log for log in all_logs if log not in self.processed_logs["processed"]]
@@ -122,43 +131,6 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
         
         return messages
     
-    def send_to_llm(self, messages):
-        """Send messages to the LLM for analysis and return extracted information"""
-        try:
-            # Format the messages
-            formatted_content = "\n".join(messages)
-            
-            # Complete prompt to send to LLM
-            prompt = f"{self.extraction_prompt}\n\nHere is the conversation to analyze:\n\n{formatted_content}\n\nExtracted information:"
-            
-            payload = {
-                "prompt": prompt,
-                "max_length": 300,
-                "temperature": 0.2,  # Lower temperature for more deterministic extraction
-                "top_p": 0.9,
-                "top_k": 40,
-                "rep_pen": 1.1
-            }
-            
-            endpoint = f"{self.kobold_api_url}/api/v1/generate"
-            response = requests.post(endpoint, json=payload, timeout=60)
-            
-            if response.status_code == 200:
-                response_json = response.json()
-                if 'results' in response_json and len(response_json['results']) > 0:
-                    # Return the LLM's response text
-                    return response_json['results'][0]['text'].strip()
-                else:
-                    print(f"InfoExtractor Error: Unexpected response format from LLM API.")
-                    return None
-            else:
-                print(f"InfoExtractor Error: Could not connect to LLM API (Status: {response.status_code}).")
-                return None
-                
-        except Exception as e:
-            print(f"InfoExtractor Error: Error communicating with LLM: {str(e)}")
-            return None
-    
     def parse_llm_response(self, response):
         """Parse the JSON response from the LLM"""
         if not response:
@@ -166,7 +138,6 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
         
         try:
             # Find JSON in response (it might have extra text)
-            import re
             json_match = re.search(r'({[\s\S]*})', response)
             if json_match:
                 response = json_match.group(1)
@@ -185,74 +156,6 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
             print(f"InfoExtractor Error: Error processing LLM response: {str(e)}")
             return []
     
-    def update_user_data(self, extracted_info, username):
-        """Update user data with extracted information"""
-        if not extracted_info:
-            return
-        
-        # Load all user data
-        all_user_data = self.jupiter.load_user_data()
-        
-        # Ensure known_users exists
-        if 'known_users' not in all_user_data:
-            all_user_data['known_users'] = {}
-        
-        # Get user data for this specific user
-        if username in all_user_data['known_users']:
-            user_data = all_user_data['known_users'][username]
-        else:
-            # If user doesn't exist yet, create new entry
-            user_data = {'name': username}
-        
-        # Keep track of updates made
-        updates = []
-        
-        for item in extracted_info:
-            if 'category' in item and 'value' in item:
-                category = item['category']
-                value = item['value']
-                
-                # Skip empty values
-                if not value or value.strip() == "":
-                    continue
-                
-                # Special case for name
-                if category == 'name':
-                    # Only update name if the current one is generic
-                    if user_data.get('name') == 'User':
-                        user_data['name'] = value
-                        updates.append(f"name: {value}")
-                    continue
-                
-                # For lists (likes, dislikes, etc.)
-                if category in ['likes', 'dislikes', 'interests', 'hobbies']:
-                    if category not in user_data:
-                        user_data[category] = []
-                    
-                    # Only add if not already present
-                    if value not in user_data[category]:
-                        user_data[category].append(value)
-                        updates.append(f"{category}: {value}")
-                else:
-                    # For simple key-value pairs
-                    # Only update if different from current value
-                    if category not in user_data or user_data[category] != value:
-                        user_data[category] = value
-                        updates.append(f"{category}: {value}")
-        
-        # Save updates if any were made
-        if updates:
-            # Update user data in the main structure
-            all_user_data['known_users'][username] = user_data
-            
-            # Save to file
-            with open(self.jupiter.user_data_file, 'w', encoding='utf-8') as f:
-                json.dump(all_user_data, f, indent=4)
-            
-            print(f"InfoExtractor: Updated user data for {username}: {', '.join(updates)}")
-            
-        return updates
-    
     def identify_username_from_log(self, log_file):
         """Try to extract the username from a log file"""
         try:
@@ -269,7 +172,6 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
                     
                     if user_prefixes:
                         # Get the most common user prefix
-                        from collections import Counter
                         prefix_counter = Counter(user_prefixes)
                         most_common = prefix_counter.most_common(1)[0][0]
                         
@@ -300,13 +202,26 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
         username = self.identify_username_from_log(log_file)
         
         # Send to LLM for analysis
-        llm_response = self.send_to_llm(messages)
+        formatted_content = "\n".join(messages)
+        llm_response = self.llm_client.extract_information(self.extraction_prompt, formatted_content)
         
         # Parse LLM response
         extracted_info = self.parse_llm_response(llm_response)
         
+        # Get user data
+        user_data = self.user_model.get_user(username)
+        if not user_data:
+            # Create new user if not found
+            user_data = {'name': username}
+        
+        # Set as current user
+        self.user_model.set_current_user(user_data)
+        
         # Update user data with extracted information
-        self.update_user_data(extracted_info, username)
+        updates = self.user_model.update_user_info(extracted_info)
+        
+        if updates:
+            print(f"InfoExtractor: Updated user data for {username}: {', '.join(updates)}")
         
         # Mark log as processed
         self.mark_log_as_processed(log_file)

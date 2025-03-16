@@ -1,0 +1,19 @@
+{
+    "llm": {
+        "provider": "ollama",
+        "api_url": "http://localhost:11434",
+        "default_model": "llama3",
+        "chat_temperature": 0.7,
+        "extraction_temperature": 0.2,
+        "token_limit": 8192
+    },
+    "paths": {
+        "prompt_folder": "prompts",
+        "logs_folder": "logs",
+        "user_data_file": "user_data.json"
+    },
+    "ui": {
+        "jupiter_color": "yellow",
+        "user_color": "magenta"
+    }
+}
