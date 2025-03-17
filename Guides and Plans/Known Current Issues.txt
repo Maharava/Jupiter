@@ -1,0 +1,130 @@
+Scroll wheel doesn't work in Knowledge view of GUI
+Text input in GUI Knowledge view remains at the top after closing it - place the text input at the bottom of knowledge view (ie, leave it where it is during regular chat view). There is no need for it to be at the top.
+
+# Jupiter Codebase Issues and Improvement Opportunities
+
+## Redundancies & Duplications
+
+1. **User Data Management Overlap**
+   - `UserModel` in `models/user_model.py` and `DataManager` in `core/data_manager.py` have similar functionality
+   - Both have methods for loading, saving, and querying user data
+   - Consolidate this into a single component to avoid maintaining duplicate code
+
+2. **Default Configuration Duplication**
+   - Default config is hardcoded in `main.py` and also stored in `config/default_config.json`
+   - Changes need to be made in both places, risking inconsistencies
+   - Solution: Use only the JSON file as the source of truth
+
+4. **User Information Formatting Duplication**
+   - Similar formatting logic exists in both `InfoExtractor.process_log_file()` and `ChatEngine.format_user_information()`
+   - Extract to a shared utility function to avoid divergence
+
+5. **Prompt Handling Redundancy**
+   - Similar pattern of checking for existing files or creating defaults in multiple places
+   - Consider a central prompt manager
+
+## Bugs & Issues
+
+1. **Thread Safety Issues in GUI**
+   - `gui_interface.py` has potential race conditions when updating UI components from different threads
+   - Direct UI updates from callbacks without proper thread synchronization
+   - Use more consistent queue-based approaches for all UI updates
+
+2. **Case Sensitivity in Username Handling**
+   - Username lookups are case-insensitive but storage is case-sensitive
+   - Could lead to duplicate user records with different capitalizations
+   - Standardize on either a case-insensitive approach throughout or add validation
+
+3. **UI Navigation Issues**
+   - Known issue: "Scroll wheel doesn't work in Knowledge view of GUI"
+   - Known issue: "Text input in GUI Knowledge view remains at the top after closing it"
+
+4. **Token Estimation Fallbacks**
+   - In `utils/text_processing.py`, the fallback token counting without tiktoken uses simplistic approximations
+   - Could lead to incorrect truncation of conversation history
+   - Consider bundling tiktoken as a required dependency
+
+5. **Error Recovery Limitations**
+   - Limited ability to recover from LLM connection failures
+   - No automatic reconnection or retry logic
+
+## Code Quality Concerns
+
+1. **Oversized Files**
+   - `gui_interface.py` is extremely long (~1500 lines) and does too many things
+   - Should be split into multiple modules (main window, knowledge view, dialogs)
+
+2. **Long Methods**
+   - `ChatEngine.run()` - excessive length with mixed responsibilities
+   - `GUIInterface._run_gui()` - initialization and event handling mixed
+   - `GUIInterface.create_knowledge_bubbles()` - complex UI generation in one method
+   - These methods should be decomposed into smaller, focused functions
+
+3. **Inconsistent Error Handling**
+   - Mix of:
+     - Returning error strings (`LLMClient.generate_chat_response()`)
+     - Printing errors to console (`InfoExtractor.process_log_file()`)
+     - Silently catching exceptions
+   - Standardize on a single approach (e.g., logging + appropriate user feedback)
+
+4. **Mixed Responsibilities**
+   - UI code in `gui_interface.py` manages both presentation and some business logic
+   - Chat engine handles both conversation flow and knowledge management
+   - Better separate these concerns
+
+5. **Hardcoded Values**
+   - Various UI dimensions, colors, and settings are hardcoded
+   - Move to configuration or constants
+
+## Maintainability Improvements
+
+1. **User Data Management Consolidation**
+   - Merge `UserModel` and `DataManager` functionality
+   - Create a clear API for user data operations
+
+2. **Add Type Hints**
+   - Codebase lacks Python type hints
+   - Adding them would improve IDE support and catch potential type errors
+
+3. **GUI Component Extraction**
+   - Split `gui_interface.py` into:
+     - Main window component
+     - Knowledge view component
+     - Dialog components
+     - UI utilities
+
+4. **Consistent Error Handling Strategy**
+   - Implement a central error handling approach
+   - Consider using Python's logging module consistently
+   - Add appropriate user-facing error messages
+
+5. **Test Coverage**
+   - No unit tests visible in the codebase
+   - Add test coverage for core functionality
+
+6. **Configuration Flexibility**
+   - Allow specifying custom config paths
+   - Support environment variable configuration
+   - Consider using a more robust configuration library
+
+7. **Documentation Improvements**
+   - Add more comprehensive module-level documentation
+   - Consider generating API documentation
+
+8. **Package Management**
+   - Add proper `setup.py` or modern `pyproject.toml`
+   - Define dependencies explicitly
+
+## Performance Considerations
+
+1. **Memory Usage in Large Conversations**
+   - The entire conversation history is kept in memory
+   - Consider more efficient storage for long conversations
+
+2. **Async Support**
+   - LLM calls are synchronous, blocking the UI
+   - Consider async/await pattern for API calls
+
+3. **Local Storage Efficiency**
+   - Simple JSON storage may become inefficient with many users
+   - Consider a lightweight database for larger deployments
