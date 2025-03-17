@@ -1,0 +1,2 @@
+Scroll wheel doesn't work in Knowledge view of GUI
+Text input in GUI Knowledge view remains at the top after closing it - place the text input at the bottom of knowledge view (ie, leave it where it is during regular chat view). There is no need for it to be at the top.

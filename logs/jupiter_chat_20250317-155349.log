@@ -1,0 +1,29 @@
+=== Jupiter Chat Session: 2025-03-17 15:53:49 ===
+
+[2025-03-17 15:54:08] Jupiter: test
+
+[2025-03-17 15:54:08] Jupiter: TEST MODE: I'm currently in offline testing mode without access to an LLM backend.
+
+Timestamp: 15:54:08
+Received: "your message"
+
+This is a simulated response for testing the UI and functionality without requiring an LLM connection.
+
+[2025-03-17 15:54:13] Jupiter: howdy
+
+[2025-03-17 15:54:13] Jupiter: TEST MODE: I'm a simulated response. No AI model is generating this text.
+
+Timestamp: 15:54:13
+Received: "your message"
+
+This is a simulated response for testing the UI and functionality without requiring an LLM connection.
+
+[2025-03-17 15:54:17] Jupiter: i like trains
+
+[2025-03-17 15:54:17] Jupiter: TEST MODE: This is an automated response. The system is in testing mode.
+
+Timestamp: 15:54:17
+Received: "your message"
+
+This is a simulated response for testing the UI and functionality without requiring an LLM connection.
+

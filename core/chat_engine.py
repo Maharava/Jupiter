@@ -306,23 +306,27 @@ Available commands:
                 self.ui.set_status("Ready")
     
     def show_knowledge(self):
-        """Show knowledge base information (placeholder for now)"""
+        """Show knowledge view with user information using the modern bubble UI"""
         if hasattr(self.ui, 'set_status'):
             status_text = "Loading knowledge..."
             if self.test_mode:
                 status_text = "TEST MODE - " + status_text
             self.ui.set_status(status_text, True)
             
-        # Display memory information for now
-        knowledge_info = self.format_memory_display()
-        self.ui.print_jupiter_message(knowledge_info)
+        # Get user data from the model
+        user_info = self.user_model.current_user
         
+        # Send data to UI and show knowledge view
+        self.ui.create_knowledge_bubbles(user_info)
+        self.ui.show_knowledge_view()
+        
+        # Reset status
         if hasattr(self.ui, 'set_status'):
+            status_text = "Viewing Knowledge"
             if self.test_mode:
-                self.ui.set_status("TEST MODE - Ready", False)
-            else:
-                self.ui.set_status("Ready", False)
-    
+                status_text = "TEST MODE - " + status_text
+            self.ui.set_status(status_text, False)
+            
     def process_knowledge_edits(self):
         """Process knowledge edits from the UI"""
         # Check if the UI has a knowledge edit queue

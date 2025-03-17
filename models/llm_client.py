@@ -68,14 +68,17 @@ class LLMClient:
         # Add timestamp for uniqueness
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         
-        # Extract user's message for minimal context
+        # Extract only the most recent user message for context
+        # This prevents leaking information from previous messages or knowledge view
         last_user_message = "your message"
-        if ":" in prompt:
-            # Try to extract the last user message from the prompt
-            parts = prompt.split("\n")
-            for part in reversed(parts):
-                if ":" in part and not part.startswith("Jupiter:"):
-                    last_user_message = part.split(":", 1)[1].strip()
+        
+        # Split by lines and only look at the last 5 lines to avoid picking up knowledge content
+        recent_lines = prompt.split("\n")[-5:]
+        for line in reversed(recent_lines):
+            if ":" in line and not line.startswith("Jupiter:"):
+                parts = line.split(":", 1)
+                if len(parts) > 1:
+                    last_user_message = parts[1].strip()
                     # Truncate if too long
                     if len(last_user_message) > 30:
                         last_user_message = last_user_message[:27] + "..."

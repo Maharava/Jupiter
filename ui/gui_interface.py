@@ -35,6 +35,12 @@ class GUIInterface:
         self.restart_callback = None
         self.knowledge_callback = None
         
+        # Initialize tracking for pending operations
+        self._pending_after_ids = []
+        
+        # Initialize list for tracking list bubbles
+        self._list_bubbles = []
+        
         # Start GUI in a separate thread
         self.gui_thread = threading.Thread(target=self._run_gui)
         self.gui_thread.daemon = True
@@ -261,53 +267,129 @@ class GUIInterface:
         # Add resize listeners
         self.knowledge_content.bind("<Configure>", self._on_knowledge_content_configure)
         self.knowledge_canvas.bind("<Configure>", self._on_knowledge_canvas_configure)
+        
+        # Add mousewheel binding for scrolling (cross-platform support)
+        self.knowledge_canvas.bind("<MouseWheel>", self._on_mousewheel)  # Windows
+        self.knowledge_canvas.bind("<Button-4>", self._on_mousewheel)    # Linux scroll up
+        self.knowledge_canvas.bind("<Button-5>", self._on_mousewheel)    # Linux scroll down
+        
+        # For MacOS
+        try:
+            self.knowledge_canvas.bind("<MouseWheelEvent>", self._on_mousewheel)
+        except:
+            pass
+    
+    def _on_mousewheel(self, event):
+        """Handle mousewheel scrolling in knowledge view"""
+        # Cross-platform scroll handling
+        if hasattr(event, 'num'):  # Linux
+            if event.num == 4:
+                self.knowledge_canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                self.knowledge_canvas.yview_scroll(1, "units")
+        elif hasattr(event, 'delta'):  # Windows
+            if event.delta > 0:
+                self.knowledge_canvas.yview_scroll(-1, "units")
+            else:
+                self.knowledge_canvas.yview_scroll(1, "units")
     
     def _on_knowledge_content_configure(self, event):
         """Update the canvas scroll region when content size changes"""
         self.knowledge_canvas.configure(scrollregion=self.knowledge_canvas.bbox("all"))
     
     def _on_knowledge_canvas_configure(self, event):
-        """Update the width of the window to match canvas width"""
+        """Update the width of the window to match canvas width and relayout tags"""
         self.knowledge_canvas.itemconfig(self.knowledge_canvas_window, width=event.width)
+        
+        # Relayout tags if we have any list bubbles
+        if hasattr(self, '_list_bubbles'):
+            for container, category, items in self._list_bubbles:
+                if container.winfo_exists():
+                    self._create_tag_chips(container, category, items)
     
     def show_knowledge_view(self):
-        """Switch to knowledge view"""
-        if self.current_view == "knowledge":
-            return
+        """Switch to knowledge view with proper cleanup"""
+        try:
+            if self.current_view == "knowledge":
+                return
+                
+            # Clean up any pending operations
+            self._cleanup_pending_operations()
+                
+            # Hide chat
+            self.chat_frame.pack_forget()
             
-        self.chat_frame.pack_forget()  # Hide chat
-        self.knowledge_frame.pack(fill=tk.BOTH, expand=True)  # Show knowledge
-        
-        # Change button in input area
-        self.send_button.pack_forget()
-        self.close_button.pack(side=tk.RIGHT, padx=(5, 0))
-        
-        # Update state
-        self.current_view = "knowledge"
-        
-        # Update status
-        self.set_status("Viewing Knowledge", False)
+            # Show knowledge
+            self.knowledge_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Change button in input area
+            self.send_button.pack_forget()
+            self.close_button.pack(side=tk.RIGHT, padx=(5, 0))
+            
+            # Update state
+            self.current_view = "knowledge"
+            
+            # Update status
+            self.set_status("Viewing Knowledge", False)
+        except Exception as e:
+            self._show_error(f"Error showing knowledge view: {str(e)}")
+            # Fall back to chat view
+            self.show_chat_view()
     
     def show_chat_view(self):
-        """Switch back to chat view"""
-        if self.current_view == "chat":
-            return
+        """Switch back to chat view with proper cleanup"""
+        try:
+            if self.current_view == "chat":
+                return
+                
+            # Clean up any pending operations
+            self._cleanup_pending_operations()
+                
+            # Properly handle UI repositioning
+            self.knowledge_frame.pack_forget()
             
-        self.knowledge_frame.pack_forget()  # Hide knowledge
-        self.chat_frame.pack(fill=tk.BOTH, expand=True)  # Show chat
-        
-        # Change button in input area
-        self.close_button.pack_forget()
-        self.send_button.pack(side=tk.RIGHT, padx=(5, 0))
-        
-        # Update state
-        self.current_view = "chat"
-        
-        # Process any knowledge edits
-        self.process_knowledge_edits()
-        
-        # Update status
-        self.set_status("Ready", False)
+            # Remove all existing widgets from chat frame to avoid layout issues
+            for widget in self.chat_frame.winfo_children():
+                widget.pack_forget()
+            
+            # Re-add chat text with proper layout
+            self.chat_text.pack(fill=tk.BOTH, expand=True)
+            
+            # Now show chat frame
+            self.chat_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Change button in input area
+            self.close_button.pack_forget()
+            self.send_button.pack(side=tk.RIGHT, padx=(5, 0))
+            
+            # Update state
+            self.current_view = "chat"
+            
+            # Process any knowledge edits
+            self.process_knowledge_edits()
+            
+            # Update status
+            self.set_status("Ready", False)
+        except Exception as e:
+            self._show_error(f"Error showing chat view: {str(e)}")
+    
+    def _cleanup_pending_operations(self):
+        """Clean up any pending operations to prevent memory leaks"""
+        try:
+            # Clear any stored bubble references
+            if hasattr(self, '_list_bubbles'):
+                self._list_bubbles = []
+                
+            # Cancel any pending after() calls (requires tracking them)
+            if hasattr(self, '_pending_after_ids'):
+                for after_id in self._pending_after_ids:
+                    try:
+                        self.root.after_cancel(after_id)
+                    except:
+                        pass
+                self._pending_after_ids = []
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
     
     def create_knowledge_bubbles(self, user_data):
         """Create knowledge bubbles from user data"""
@@ -488,10 +570,14 @@ class GUIInterface:
         remove_btn.pack(side=tk.LEFT, padx=2)
     
     def create_list_bubble(self, category, items):
-        """Create a bubble for list values with tag/chip display"""
+        """Create a bubble for list values with tag/chip display that adapts to container width"""
         bubble = tk.Frame(self.knowledge_content, bg=self._get_color(self.jupiter_color, 0.7), 
                         relief=tk.SOLID, bd=1)
         bubble.pack(fill=tk.X, padx=10, pady=5)
+        
+        # Store info for tag relayout
+        bubble.category = category
+        bubble.items = items
         
         # Content frame with padding
         content_frame = tk.Frame(bubble, bg=bubble["bg"], padx=10, pady=10)
@@ -513,51 +599,11 @@ class GUIInterface:
         tags_container = tk.Frame(content_frame, bg=bubble["bg"])
         tags_container.pack(fill=tk.X)
         
-        # Frame to hold each row of tags
-        current_row = tk.Frame(tags_container, bg=bubble["bg"])
-        current_row.pack(fill=tk.X, pady=(0, 2))
-        
-        row_width = 0
-        max_width = 320  # Approximate max width for tags in a row
-        
-        # Create a chip for each item
-        for item in items:
-            # Create test label to measure width
-            test_label = tk.Label(self.root, text=item)
-            item_width = test_label.winfo_reqwidth() + 35  # Add space for X button and padding
-            test_label.destroy()
-            
-            # Check if we need a new row
-            if row_width + item_width > max_width:
-                current_row = tk.Frame(tags_container, bg=bubble["bg"])
-                current_row.pack(fill=tk.X, pady=(0, 2))
-                row_width = 0
-            
-            # Create tag chip
-            tag_chip = tk.Frame(current_row, bg="#555", bd=0, padx=5, pady=2)
-            tag_chip.pack(side=tk.LEFT, padx=2, pady=2)
-            
-            # Tag text
-            tag_text = tk.Label(tag_chip, text=item, fg="white", bg="#555")
-            tag_text.pack(side=tk.LEFT)
-            
-            # Remove button for tag
-            remove_tag_btn = tk.Button(
-                tag_chip, 
-                text="×", 
-                bg="#555", 
-                fg="white", 
-                bd=0,
-                font=("Helvetica", 9),
-                command=lambda i=item: self.remove_list_item(category, i)
-            )
-            remove_tag_btn.pack(side=tk.LEFT)
-            
-            # Update row width
-            row_width += item_width
+        # Tags will be created in an update method that can be called on resize
+        self._create_tag_chips(tags_container, category, items)
         
         # Add new item button in a separate row
-        button_row = tk.Frame(tags_container, bg=bubble["bg"])
+        button_row = tk.Frame(content_frame, bg=bubble["bg"])
         button_row.pack(fill=tk.X, pady=(2, 0))
         
         add_btn = tk.Button(
@@ -587,9 +633,76 @@ class GUIInterface:
             command=lambda: self.remove_knowledge(category)
         )
         remove_btn.pack(side=tk.LEFT, padx=2)
+        
+        # Register this bubble for resize updates
+        if not hasattr(self, '_list_bubbles'):
+            self._list_bubbles = []
+        self._list_bubbles.append((tags_container, category, items))
+        
+        return bubble
+    
+    def _create_tag_chips(self, container, category, items):
+        """Create tag chips in the container with dynamic layout"""
+        # Clear existing tags
+        for widget in container.winfo_children():
+            widget.destroy()
+        
+        # Get actual container width
+        container.update_idletasks()  # Ensure geometry is updated
+        try:
+            # Get actual width or use window width minus padding
+            actual_width = container.winfo_width()
+            if actual_width < 50:  # If not properly initialized
+                actual_width = self.root.winfo_width() - 80
+        except:
+            # Fallback to a reasonable default
+            actual_width = 320
+        
+        # Frame to hold each row of tags
+        current_row = tk.Frame(container, bg=container["bg"])
+        current_row.pack(fill=tk.X, pady=(0, 2))
+        
+        row_width = 0
+        max_width = max(200, actual_width - 20)  # Minimum reasonable width with padding
+        
+        # Create a chip for each item
+        for item in items:
+            # Create test label to measure width
+            test_label = tk.Label(self.root, text=item)
+            item_width = test_label.winfo_reqwidth() + 35  # Add space for X button and padding
+            test_label.destroy()
+            
+            # Check if we need a new row
+            if row_width + item_width > max_width:
+                current_row = tk.Frame(container, bg=container["bg"])
+                current_row.pack(fill=tk.X, pady=(0, 2))
+                row_width = 0
+            
+            # Create tag chip
+            tag_chip = tk.Frame(current_row, bg="#555", bd=0, padx=5, pady=2)
+            tag_chip.pack(side=tk.LEFT, padx=2, pady=2)
+            
+            # Tag text
+            tag_text = tk.Label(tag_chip, text=item, fg="white", bg="#555")
+            tag_text.pack(side=tk.LEFT)
+            
+            # Remove button for tag
+            remove_tag_btn = tk.Button(
+                tag_chip, 
+                text="×", 
+                bg="#555", 
+                fg="white", 
+                bd=0,
+                font=("Helvetica", 9),
+                command=lambda i=item: self.remove_list_item(category, i)
+            )
+            remove_tag_btn.pack(side=tk.LEFT)
+            
+            # Update row width
+            row_width += item_width
     
     def edit_knowledge(self, category, current_value):
-        """Edit a knowledge item"""
+        """Edit a knowledge item with thread safety"""
         # Different editors based on category type
         if category in ['important_dates']:
             new_value = self.show_date_picker(category, current_value)
@@ -607,7 +720,12 @@ class GUIInterface:
                 "new_value": new_value
             })
             
-            # Update UI immediately for better UX
+            # Update UI using a threadsafe approach
+            self.root.after(0, lambda: self._update_knowledge_ui(category, current_value, new_value))
+    
+    def _update_knowledge_ui(self, category, old_value, new_value):
+        """Thread-safe method to update knowledge UI after edit"""
+        try:
             for widget in self.knowledge_content.winfo_children():
                 if isinstance(widget, tk.Frame) and widget.winfo_children():
                     for child in widget.winfo_children():
@@ -617,12 +735,14 @@ class GUIInterface:
                                 if isinstance(subchild, tk.Label) and subchild.cget("text") == category.capitalize():
                                     # Find value label
                                     for value_widget in child.winfo_children():
-                                        if isinstance(value_widget, tk.Label) and value_widget.cget("text") == str(current_value):
+                                        if isinstance(value_widget, tk.Label) and value_widget.cget("text") == str(old_value):
                                             value_widget.config(text=str(new_value))
                                             return
+        except Exception as e:
+            print(f"Error updating knowledge UI: {e}")
     
     def remove_knowledge(self, category):
-        """Remove a knowledge item"""
+        """Remove a knowledge item with thread safety"""
         # Ask for confirmation
         if not self.show_confirm_dialog(f"Remove {category.capitalize()}?", 
                                        f"Are you sure you want to remove {category.capitalize()}?"):
@@ -634,20 +754,27 @@ class GUIInterface:
             "category": category
         })
         
-        # Remove from UI immediately for better UX
-        for widget in self.knowledge_content.winfo_children():
-            if isinstance(widget, tk.Frame):
-                # Check if this frame contains the category we want to remove
-                for child in widget.winfo_children():
-                    if isinstance(child, tk.Frame):
-                        for subchild in child.winfo_children():
-                            if isinstance(subchild, tk.Label) and subchild.cget("text") == category.capitalize():
-                                # Found the bubble to remove
-                                widget.destroy()
-                                return
+        # Use thread-safe approach to update UI
+        self.root.after(0, lambda: self._remove_knowledge_ui(category))
+    
+    def _remove_knowledge_ui(self, category):
+        """Thread-safe method to update UI after knowledge removal"""
+        try:
+            for widget in self.knowledge_content.winfo_children():
+                if isinstance(widget, tk.Frame):
+                    # Check if this frame contains the category we want to remove
+                    for child in widget.winfo_children():
+                        if isinstance(child, tk.Frame):
+                            for subchild in child.winfo_children():
+                                if isinstance(subchild, tk.Label) and subchild.cget("text") == category.capitalize():
+                                    # Found the bubble to remove
+                                    widget.destroy()
+                                    return
+        except Exception as e:
+            print(f"Error removing knowledge UI element: {e}")
     
     def add_list_item(self, category):
-        """Add an item to a list"""
+        """Add an item to a list with thread safety"""
         new_item = self.show_text_editor(f"Add to {category}", "")
         if new_item:
             # Queue the addition for processing
@@ -657,11 +784,11 @@ class GUIInterface:
                 "value": new_item
             })
             
-            # Update UI - easiest to just refresh the whole knowledge view
-            self.refresh_knowledge_view()
+            # Update UI - using a safer approach
+            self.root.after(10, self.refresh_knowledge_view)
     
     def remove_list_item(self, category, item):
-        """Remove an item from a list"""
+        """Remove an item from a list with thread safety"""
         # Queue the removal for processing
         self.knowledge_edit_queue.put({
             "action": "remove_list_item",
@@ -669,17 +796,99 @@ class GUIInterface:
             "value": item
         })
         
-        # Update UI - easiest to just refresh the whole knowledge view
-        self.refresh_knowledge_view()
+        # Update UI using thread-safe approach
+        self.root.after(10, self.refresh_knowledge_view)
+    
+    def refresh_knowledge_view(self):
+        """Thread-safe method to refresh the knowledge view"""
+        try:
+            if self.knowledge_callback and callable(self.knowledge_callback):
+                self.knowledge_callback()
+        except Exception as e:
+            print(f"Error refreshing knowledge view: {e}")
     
     def show_text_editor(self, category, current_value):
-        """Show dialog for editing text values"""
-        return simpledialog.askstring(
-            f"Edit {category.capitalize()}", 
-            f"Enter new value for {category.capitalize()}:",
-            initialvalue=current_value,
-            parent=self.root
-        )
+        """Show an improved dialog for editing text values"""
+        # Create custom dialog with better keyboard support
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Edit {category.capitalize()}")
+        dialog.grab_set()  # Modal window
+        dialog.resizable(False, False)
+        
+        # Center dialog on parent window
+        dialog_width = 350
+        dialog_height = 150
+        
+        # Get parent window position and size
+        root_x = self.root.winfo_rootx()
+        root_y = self.root.winfo_rooty()
+        root_width = self.root.winfo_width()
+        root_height = self.root.winfo_height()
+        
+        # Calculate position (centered on parent)
+        x_position = root_x + (root_width - dialog_width) // 2
+        y_position = root_y + (root_height - dialog_height) // 2
+        
+        # Ensure dialog appears on screen if parent is near edge
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        if x_position + dialog_width > screen_width:
+            x_position = screen_width - dialog_width - 10
+        if y_position + dialog_height > screen_height:
+            y_position = screen_height - dialog_height - 10
+        
+        dialog.geometry(f"{dialog_width}x{dialog_height}+{x_position}+{y_position}")
+        
+        # Instruction label
+        tk.Label(
+            dialog, 
+            text=f"Enter new value for {category.capitalize()}:",
+            anchor="w", 
+            pady=10
+        ).pack(fill=tk.X, padx=20)
+        
+        # Text entry
+        entry = tk.Entry(dialog, width=40)
+        entry.pack(padx=20, pady=5)
+        entry.insert(0, current_value)
+        entry.select_range(0, tk.END)  # Select all text
+        entry.focus_set()  # Set focus to entry
+        
+        # Result variable
+        result = [None]
+        
+        # Handlers
+        def on_ok():
+            result[0] = entry.get()
+            dialog.destroy()
+            
+        def on_cancel():
+            dialog.destroy()
+        
+        # Keyboard handling
+        def on_key(event):
+            if event.keysym == "Return":
+                on_ok()
+            elif event.keysym == "Escape":
+                on_cancel()
+        
+        dialog.bind("<Key>", on_key)
+        
+        # Buttons
+        button_frame = tk.Frame(dialog)
+        button_frame.pack(fill=tk.X, padx=20, pady=15)
+        
+        cancel_btn = tk.Button(button_frame, text="Cancel", command=on_cancel)
+        cancel_btn.pack(side=tk.RIGHT, padx=5)
+        
+        ok_btn = tk.Button(button_frame, text="OK", command=on_ok)
+        ok_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+        
+        return result[0]
     
     def show_number_editor(self, category, current_value):
         """Show dialog for editing number values"""
@@ -703,43 +912,67 @@ class GUIInterface:
         return self.show_text_editor(category, current_value)
     
     def show_confirm_dialog(self, title, message):
-        """Show a confirmation dialog"""
+        """Show an improved confirmation dialog"""
         dialog = tk.Toplevel(self.root)
         dialog.title(title)
         dialog.grab_set()  # Modal window
         dialog.resizable(False, False)
         
-        # Set dialog position relative to main window
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 150
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 50
-        dialog.geometry(f"300x120+{x}+{y}")
+        # Center dialog on parent window
+        dialog_width = 300
+        dialog_height = 120
+        
+        # Get parent window position and size
+        root_x = self.root.winfo_rootx()
+        root_y = self.root.winfo_rooty()
+        root_width = self.root.winfo_width()
+        root_height = self.root.winfo_height()
+        
+        # Calculate position (centered on parent)
+        x_position = root_x + (root_width - dialog_width) // 2
+        y_position = root_y + (root_height - dialog_height) // 2
+        
+        # Ensure dialog appears on screen if parent is near edge
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        if x_position + dialog_width > screen_width:
+            x_position = screen_width - dialog_width - 10
+        if y_position + dialog_height > screen_height:
+            y_position = screen_height - dialog_height - 10
+        
+        dialog.geometry(f"{dialog_width}x{dialog_height}+{x_position}+{y_position}")
         
         # Message
         msg_label = tk.Label(dialog, text=message, wraplength=280, pady=10)
         msg_label.pack(fill=tk.X, padx=10)
         
+        # Result variable
+        result = [False]
+        
+        # Handlers
+        def on_yes():
+            result[0] = True
+            dialog.destroy()
+            
+        def on_no():
+            dialog.destroy()
+        
+        # Keyboard handling
+        def on_key(event):
+            if event.keysym == "Return":
+                on_yes()
+            elif event.keysym == "Escape":
+                on_no()
+        
+        dialog.bind("<Key>", on_key)
+        
         # Buttons frame
         btn_frame = tk.Frame(dialog)
         btn_frame.pack(fill=tk.X, padx=10, pady=10)
         
-        # Result variable
-        result = [False]  # Using a list as a mutable container
-        
-        # Confirm button
-        confirm_btn = tk.Button(
-            btn_frame,
-            text="Yes",
-            bg="#333",
-            fg="white",
-            relief=tk.FLAT,
-            padx=10,
-            pady=2,
-            command=lambda: [result.append(True), dialog.destroy()]
-        )
-        confirm_btn.pack(side=tk.RIGHT, padx=5)
-        
-        # Cancel button
-        cancel_btn = tk.Button(
+        # Buttons
+        no_btn = tk.Button(
             btn_frame,
             text="No",
             bg="#333",
@@ -747,28 +980,95 @@ class GUIInterface:
             relief=tk.FLAT,
             padx=10,
             pady=2,
-            command=dialog.destroy
+            command=on_no
         )
-        cancel_btn.pack(side=tk.RIGHT, padx=5)
+        no_btn.pack(side=tk.RIGHT, padx=5)
+        
+        yes_btn = tk.Button(
+            btn_frame,
+            text="Yes",
+            bg="#333",
+            fg="white",
+            relief=tk.FLAT,
+            padx=10,
+            pady=2,
+            command=on_yes
+        )
+        yes_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # Set initial focus to the No button (safer default)
+        no_btn.focus_set()
         
         # Wait for dialog to close
         dialog.wait_window()
         
-        return len(result) > 1 and result[1]
+        return result[0]
     
-    def refresh_knowledge_view(self):
-        """Refresh the knowledge view with updated data"""
-        if self.knowledge_callback:
-            self.knowledge_callback()
+    def _show_error(self, message):
+        """Show error message to user in a more user-friendly way"""
+        try:
+            print(f"GUI Error: {message}")
+            
+            # Use a statusbar message first for non-critical errors
+            self.set_status(f"Error: {message[:50]}...", False)
+            
+            # For critical errors, show dialog
+            if "critical" in message.lower() or "failed" in message.lower():
+                self.root.after(0, lambda: self._show_error_dialog("Error", message))
+        except:
+            # Last resort if even error showing fails
+            print(f"Critical GUI error: {message}")
     
-    def process_knowledge_edits(self):
-        """Process all queued knowledge edits"""
-        # Just a placeholder - actual implementation would update the user model
-        while not self.knowledge_edit_queue.empty():
-            edit = self.knowledge_edit_queue.get()
-            # In a real implementation, this would be passed to the chat engine
-            # which would update the user model
-            print(f"Processing knowledge edit: {edit}")
+    def _show_error_dialog(self, title, message):
+        """Show an error dialog to the user"""
+        try:
+            dialog = tk.Toplevel(self.root)
+            dialog.title(title)
+            dialog.grab_set()
+            
+            # Setup
+            dialog_width = 400
+            dialog_height = 150
+            
+            # Center on parent
+            root_x = self.root.winfo_rootx()
+            root_y = self.root.winfo_rooty()
+            root_width = self.root.winfo_width()
+            root_height = self.root.winfo_height()
+            
+            x_position = root_x + (root_width - dialog_width) // 2
+            y_position = root_y + (root_height - dialog_height) // 2
+            
+            dialog.geometry(f"{dialog_width}x{dialog_height}+{x_position}+{y_position}")
+            
+            # Error icon (use a text symbol since we might not have an image)
+            header = tk.Frame(dialog, bg="#FFF0F0")
+            header.pack(fill=tk.X)
+            
+            tk.Label(header, text="⚠️", font=("Arial", 24), bg="#FFF0F0").pack(side=tk.LEFT, padx=15, pady=10)
+            tk.Label(header, text="An error occurred", font=("Arial", 12, "bold"), bg="#FFF0F0").pack(side=tk.LEFT, pady=10)
+            
+            # Error message
+            message_frame = tk.Frame(dialog)
+            message_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+            
+            msg = tk.Label(message_frame, text=message, wraplength=350, justify="left", anchor="w")
+            msg.pack(fill=tk.BOTH, expand=True)
+            
+            # Close button
+            btn_frame = tk.Frame(dialog)
+            btn_frame.pack(fill=tk.X, padx=15, pady=(0, 10))
+            
+            close_btn = tk.Button(btn_frame, text="Close", width=10, command=dialog.destroy)
+            close_btn.pack(side=tk.RIGHT)
+            
+            # Handle Escape key
+            dialog.bind("<Escape>", lambda e: dialog.destroy())
+            
+            # Set focus to button
+            close_btn.focus_set()
+        except Exception as e:
+            print(f"Critical error showing error dialog: {e}")
     
     def _handle_restart(self):
         """Handle restart button click"""
@@ -1011,3 +1311,29 @@ class GUIInterface:
         self.is_running = False
         if self.root:
             self.root.after(0, self.root.destroy)
+    
+    def process_knowledge_edits(self):
+        """Process all queued knowledge edits with error handling"""
+        edits_processed = 0
+        errors = 0
+        
+        try:
+            # Process all edits in the queue
+            while not self.knowledge_edit_queue.empty():
+                try:
+                    edit = self.knowledge_edit_queue.get()
+                    # Print for debugging
+                    print(f"Processing knowledge edit: {edit}")
+                    
+                    # In a real implementation, this would be passed to the chat engine
+                    # which would update the user model
+                    edits_processed += 1
+                except Exception as e:
+                    errors += 1
+                    print(f"Error processing edit {edits_processed + errors}: {e}")
+                    
+            # If we had errors, show a status message
+            if errors > 0:
+                self.set_status(f"Warning: {errors} edit(s) failed to process", False)
+        except Exception as e:
+            self._show_error(f"Error processing knowledge edits: {e}")
