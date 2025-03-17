@@ -1,0 +1,5 @@
+# Ignore the 'models' folder inside 'piper'
+piper/models/
+
+# Ignore the 'pkgconfig' folder inside 'piper'
+piper/pkgconfig/

@@ -23,6 +23,19 @@ class ChatEngine:
         os.makedirs(config['paths']['prompt_folder'], exist_ok=True)
         os.makedirs(config['paths']['logs_folder'], exist_ok=True)
         
+        # Initialize TTS if enabled
+        self.use_tts = config.get('tts', {}).get('enabled', False)
+        if self.use_tts:
+            try:
+                from utils.tts_manager import TTSManager
+                self.tts_manager = TTSManager()
+            except Exception as e:
+                print(f"Failed to initialize TTS: {e}")
+                self.use_tts = False
+                self.tts_manager = None
+        else:
+            self.tts_manager = None
+        
         if self.test_mode:
             print(f"🧪 ChatEngine initialized in TEST MODE")
     
@@ -51,7 +64,7 @@ class ChatEngine:
             return default_prompt
     
     def format_user_information(self):
-        """Format known user information for inclusion in system prompt"""
+        """Format user information for inclusion in system prompt"""
         user_info = self.user_model.current_user
         
         if not user_info or len(user_info) <= 1:  # Only contains name
@@ -112,7 +125,7 @@ class ChatEngine:
         return f"{self.user_model.current_user.get('name', 'User')}:"
     
     def format_memory_display(self):
-        """Format user memory information for display to the user"""
+        """Format user memory information for display"""
         user_info = self.user_model.current_user
         
         # Start with header
@@ -175,7 +188,7 @@ class ChatEngine:
         return memory_display
     
     def handle_user_commands(self, user_input):
-        """Handle special user commands for managing identity"""
+        """Handle special user commands"""
         if user_input.startswith('/name '):
             # Command to change username
             new_name = user_input[6:].strip()
@@ -210,7 +223,7 @@ Available commands:
         return None
     
     def handle_initial_greeting(self):
-        """Handle the initial greeting and user identification"""
+        """Handle initial greeting and user identification"""
         # Start a new log file
         self.logger.start_new_log()
         
@@ -271,12 +284,9 @@ Available commands:
             self.ui.print_jupiter_message(f"Nice to meet you, {name}! How can I help you today?")
     
     def restart_chat(self):
-        """Restart the chat session while preserving user data"""
+        """Restart chat session while preserving user data"""
         # Log that we're restarting
         self.logger.log_message("System:", "Chat session restarted by user")
-        
-        # Save current log file
-        current_log = self.logger.get_current_log_file()
         
         # Start a new log file
         self.logger.start_new_log()
@@ -306,7 +316,7 @@ Available commands:
                 self.ui.set_status("Ready")
     
     def show_knowledge(self):
-        """Show knowledge view with user information using the modern bubble UI"""
+        """Show knowledge view with user information"""
         if hasattr(self.ui, 'set_status'):
             status_text = "Loading knowledge..."
             if self.test_mode:
@@ -447,7 +457,7 @@ Available commands:
             # Log user message
             self.logger.log_message(user_prefix, user_input)
             
-            # Add to history
+            # Add user input to history
             self.conversation_history.append(f"{user_prefix} {user_input}")
             
             # Update status to show Jupiter is generating a response
@@ -468,12 +478,27 @@ Available commands:
             self.ui.print_jupiter_message(response)
             self.logger.log_message("Jupiter:", response)
             
-            # Add to history
+            # Speak response if TTS is enabled
+            if self.use_tts and self.tts_manager:
+                # Optional: Callback function when speech completes
+                def speech_complete():
+                    if hasattr(self.ui, 'set_status'):
+                        self.ui.set_status("Ready")
+                
+                # Start speech in background
+                self.tts_manager.speak(response, callback=speech_complete)
+                
+                # Update status if UI supports it
+                if hasattr(self.ui, 'set_status'):
+                    self.ui.set_status("Speaking...")
+            
+            # Add response to history
             self.conversation_history.append(f"Jupiter: {response}")
             
-            # Reset status
-            if hasattr(self.ui, 'set_status'):
-                if self.test_mode:
-                    self.ui.set_status("TEST MODE - Ready")
-                else:
-                    self.ui.set_status("Ready")
+            # Reset status if not speaking
+            if not (self.use_tts and self.tts_manager):
+                if hasattr(self.ui, 'set_status'):
+                    if self.test_mode:
+                        self.ui.set_status("TEST MODE - Ready")
+                    else:
+                        self.ui.set_status("Ready")

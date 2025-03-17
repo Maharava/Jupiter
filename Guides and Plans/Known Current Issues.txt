@@ -8,20 +8,16 @@ Text input in GUI Knowledge view remains at the top after closing it - place the
 1. **User Data Management Overlap**
    - `UserModel` in `models/user_model.py` and `DataManager` in `core/data_manager.py` have similar functionality
    - Both have methods for loading, saving, and querying user data
-   - Consolidate this into a single component to avoid maintaining duplicate code
+   - SOLUTION: Consolidate this into a single component to avoid maintaining duplicate code
 
 2. **Default Configuration Duplication**
    - Default config is hardcoded in `main.py` and also stored in `config/default_config.json`
    - Changes need to be made in both places, risking inconsistencies
-   - Solution: Use only the JSON file as the source of truth
+   - SOLUTION: Use only the JSON file as the source of truth, change code to only pull from this
 
 4. **User Information Formatting Duplication**
    - Similar formatting logic exists in both `InfoExtractor.process_log_file()` and `ChatEngine.format_user_information()`
-   - Extract to a shared utility function to avoid divergence
-
-5. **Prompt Handling Redundancy**
-   - Similar pattern of checking for existing files or creating defaults in multiple places
-   - Consider a central prompt manager
+   - SOLUTION: Refactor code and extract to a shared utility function to avoid divergence, where all other code can pull from, in the Utils folder
 
 ## Bugs & Issues
 
@@ -29,15 +25,17 @@ Text input in GUI Knowledge view remains at the top after closing it - place the
    - `gui_interface.py` has potential race conditions when updating UI components from different threads
    - Direct UI updates from callbacks without proper thread synchronization
    - Use more consistent queue-based approaches for all UI updates
+   - EXPLIN FURTHER
 
 2. **Case Sensitivity in Username Handling**
    - Username lookups are case-insensitive but storage is case-sensitive
    - Could lead to duplicate user records with different capitalizations
-   - Standardize on either a case-insensitive approach throughout or add validation
+   - SOLUTION: Standardize on  a case-insensitive approach throughout or add validation. if two+ users have the same username, ask them for unique identifiers (such as last names)
 
 3. **UI Navigation Issues**
    - Known issue: "Scroll wheel doesn't work in Knowledge view of GUI"
    - Known issue: "Text input in GUI Knowledge view remains at the top after closing it"
+   - SOLUTION: Fix both
 
 4. **Token Estimation Fallbacks**
    - In `utils/text_processing.py`, the fallback token counting without tiktoken uses simplistic approximations
