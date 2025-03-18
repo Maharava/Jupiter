@@ -5,6 +5,7 @@ import datetime
 from utils.intent_recog import load_model, get_intent
 from utils.voice_cmd import intent_functions
 from utils.text_processing import count_tokens, truncate_to_token_limit
+from utils.piper import llm_speak  # Import the original llm_speak function directly
 
 class ChatEngine:
     """Core chat functionality for Jupiter"""
@@ -193,13 +194,19 @@ class ChatEngine:
                 # Update user name
                 self.user_model.current_user['name'] = new_name
                 self.user_model.save_current_user()
-                return f"I'll call you {new_name} from now on."
+                response = f"I'll call you {new_name} from now on."
+                llm_speak(response)  # Speak the response
+                return response
             else:
-                return "Please provide a name after the /name command."
+                response = "Please provide a name after the /name command."
+                llm_speak(response)  # Speak the response
+                return response
         
         elif user_input == '/memory':
             # Show what Jupiter remembers about the user
-            return self.format_memory_display()
+            response = self.format_memory_display()
+            llm_speak("Here's what I remember about you.")  # Simplified for speech
+            return response
         
         elif user_input == '/help':
             # Show available commands
@@ -213,7 +220,8 @@ Available commands:
             # Add test mode info
             if self.test_mode:
                 help_text += "\n⚠️ TEST MODE is active - running without LLM backend\n"
-                
+            
+            llm_speak("Here are the available commands.")  # Simplified for speech
             return help_text
         
         # Not a command, return None to continue normal processing
@@ -230,7 +238,9 @@ Available commands:
             test_mode_notice = " (TEST MODE - No LLM connection)"
         
         # Ask for name
-        self.ui.print_jupiter_message(f"I'm Jupiter{test_mode_notice}, your AI assistant. Please enter your name. Please ONLY type your name in. Consider it a username.")
+        greeting = f"I'm Jupiter{test_mode_notice}, your AI assistant. Please enter your name. Please ONLY type your name in. Consider it a username."
+        self.ui.print_jupiter_message(greeting)
+        llm_speak("I'm Jupiter, your AI assistant. Please enter your name.")
         
         while True:
             name = self.ui.get_user_input()
@@ -243,7 +253,9 @@ Available commands:
             if name:
                 break
             else:
-                self.ui.print_jupiter_message("Please enter a name or type 'exit' to quit.")
+                prompt = "Please enter a name or type 'exit' to quit."
+                self.ui.print_jupiter_message(prompt)
+                llm_speak(prompt)
         
         # Load all user data
         all_user_data = self.user_model.load_all_users()
@@ -263,10 +275,12 @@ Available commands:
                 self.user_model.set_current_user(user_data)
                 
                 # Greeting with test mode notice if applicable
+                welcome = f"Welcome back, {actual_name}! It's great to chat with you again."
                 if self.test_mode:
-                    self.ui.print_jupiter_message(f"Welcome back, {actual_name}! It's great to chat with you again. (TEST MODE ACTIVE)")
-                else:
-                    self.ui.print_jupiter_message(f"Welcome back, {actual_name}! It's great to chat with you again.")
+                    welcome += " (TEST MODE ACTIVE)"
+                
+                self.ui.print_jupiter_message(welcome)
+                llm_speak(f"Welcome back, {actual_name}! It's great to chat with you again.")
                     
                 return
         
@@ -275,10 +289,12 @@ Available commands:
         self.user_model.save_current_user()
         
         # Greeting with test mode notice if applicable
+        greeting = f"Nice to meet you, {name}! How can I help you today?"
         if self.test_mode:
-            self.ui.print_jupiter_message(f"Nice to meet you, {name}! How can I help you today? (TEST MODE ACTIVE)")
-        else:
-            self.ui.print_jupiter_message(f"Nice to meet you, {name}! How can I help you today?")
+            greeting += " (TEST MODE ACTIVE)"
+        
+        self.ui.print_jupiter_message(greeting)
+        llm_speak(f"Nice to meet you, {name}! How can I help you today?")
     
     def restart_chat(self):
         """Restart chat session while preserving user data"""
@@ -302,8 +318,12 @@ Available commands:
             test_mode_notice = " (TEST MODE ACTIVE)"
         
         # Show welcome message
-        self.ui.print_jupiter_message(f"=== Jupiter Chat Restarted{test_mode_notice} ===")
-        self.ui.print_jupiter_message(f"Hello again, {self.user_model.current_user.get('name', 'User')}! How can I help you today?")
+        restart_message = f"=== Jupiter Chat Restarted{test_mode_notice} ==="
+        self.ui.print_jupiter_message(restart_message)
+        
+        greeting = f"Hello again, {self.user_model.current_user.get('name', 'User')}! How can I help you today?"
+        self.ui.print_jupiter_message(greeting)
+        llm_speak(greeting)
         
         # Reset status if it's a GUI
         if hasattr(self.ui, 'set_status'):
@@ -327,6 +347,9 @@ Available commands:
         self.ui.create_knowledge_bubbles(user_info)
         self.ui.show_knowledge_view()
         
+        # Speak notification
+        llm_speak("Showing your knowledge profile.")
+        
         # Reset status
         if hasattr(self.ui, 'set_status'):
             status_text = "Viewing Knowledge"
@@ -341,6 +364,7 @@ Available commands:
             return
             
         # Process all edits in the queue
+        edits_processed = False
         while not self.ui.knowledge_edit_queue.empty():
             edit = self.ui.knowledge_edit_queue.get()
             
@@ -349,12 +373,14 @@ Available commands:
                 # Update simple value
                 self.user_model.current_user[edit["category"]] = edit["new_value"]
                 print(f"Updated {edit['category']} from '{edit['old_value']}' to '{edit['new_value']}'")
-                
+                edits_processed = True
+                    
             elif edit["action"] == "remove":
                 # Remove category entirely
                 if edit["category"] in self.user_model.current_user:
                     del self.user_model.current_user[edit["category"]]
                     print(f"Removed {edit['category']}")
+                    edits_processed = True
                     
             elif edit["action"] == "add_list_item":
                 # Add item to list
@@ -369,6 +395,7 @@ Available commands:
                 if new_item not in self.user_model.current_user[category]:
                     self.user_model.current_user[category].append(new_item)
                     print(f"Added '{new_item}' to {category}")
+                    edits_processed = True
                     
             elif edit["action"] == "remove_list_item":
                 # Remove item from list
@@ -380,6 +407,7 @@ Available commands:
                     if item in self.user_model.current_user[category]:
                         self.user_model.current_user[category].remove(item)
                         print(f"Removed '{item}' from {category}")
+                        edits_processed = True
                         
                     # If list is now empty, remove the category
                     if not self.user_model.current_user[category]:
@@ -387,7 +415,9 @@ Available commands:
                         print(f"Removed empty category {category}")
         
         # Save changes to user model
-        self.user_model.save_current_user()
+        if edits_processed:
+            self.user_model.save_current_user()
+            llm_speak("Knowledge profile updated.")
     
     def run(self):
         """Run the chat interface"""
@@ -427,15 +457,17 @@ Available commands:
             
             # Check for exit command
             if self.ui.handle_exit_command(user_input):
+                exit_message = "Ending chat session. Goodbye!"
+                llm_speak(exit_message)
                 break
             
-            # Check for intents before command handling
+            # Check for specific keywords that might trigger intent recognition
+            intent_triggered = False
             if self.intent_classifier and self.intent_vectorizer:
-                predicted_intent = get_intent(user_input, self.intent_classifier, self.intent_vectorizer)
-                
-                if predicted_intent is not None:
-                    # Intent recognized, execute corresponding function
-                    if predicted_intent in intent_functions:
+                if any(keyword in user_input.lower() for keyword in ["what time", "current time", "tell me the time", "play music"]):
+                    predicted_intent = get_intent(user_input, self.intent_classifier, self.intent_vectorizer, threshold=0.65)
+                    
+                    if predicted_intent is not None and predicted_intent in intent_functions:
                         # Get the function from the map
                         command_func = intent_functions[predicted_intent]
                         
@@ -447,8 +479,9 @@ Available commands:
                         else:
                             response = command_func()
                             
-                        # Display and log response
+                        # Display, speak, and log response
                         self.ui.print_jupiter_message(response)
+                        llm_speak(response)
                         self.logger.log_message("Jupiter:", response)
                         
                         # Reset status if UI supports it
@@ -458,7 +491,11 @@ Available commands:
                             else:
                                 self.ui.set_status("Ready")
                                 
-                        continue  # Skip LLM - go back to waiting for next input
+                        intent_triggered = True
+                
+            # If an intent was triggered, skip to next loop iteration
+            if intent_triggered:
+                continue
             
             # Set busy status
             if hasattr(self.ui, 'set_status'):
@@ -505,6 +542,9 @@ Available commands:
             # Print and log response
             self.ui.print_jupiter_message(response)
             self.logger.log_message("Jupiter:", response)
+            
+            # Speak the response directly
+            llm_speak(response)
             
             # Add response to history
             self.conversation_history.append(f"Jupiter: {response}")
