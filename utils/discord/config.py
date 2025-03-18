@@ -16,6 +16,13 @@ class DiscordConfig:
         self.config = self.DEFAULT_CONFIG.copy()
         if config_dict:
             self.config.update(config_dict)
+        
+        # Check for token in environment variable
+        import os
+        env_token = os.environ.get("JUPITER_DISCORD_TOKEN")
+        if env_token:
+            self.config["token"] = env_token
+        
         self.validate()
     
     def validate(self):

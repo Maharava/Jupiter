@@ -1,25 +1,30 @@
 {
-    "llm": {
-        "provider": "ollama",
-        "api_url": "http://localhost:11434",
-        "default_model": "gemma3",
-        "chat_temperature": 0.7,
-        "extraction_temperature": 0.2,
-        "token_limit": 8192
-    },
-    "paths": {
-        "prompt_folder": "prompts",
-        "logs_folder": "logs",
-        "user_data_file": "user_data.json"
-    },
-    "ui": {
-        "jupiter_color": "yellow",
-        "user_color": "magenta"
-    },
-    "discord": {
-        "enabled": false,
-        "token": "",
-        "allowed_servers": [],
-        "allowed_channels": []
-    }
+  "llm": {
+    "provider": "ollama",
+    "api_url": "http://localhost:11434",
+    "default_model": "gemma3",
+    "chat_temperature": 0.7,
+    "extraction_temperature": 0.2,
+    "token_limit": 8192
+  },
+  "paths": {
+    "prompt_folder": "prompts",
+    "logs_folder": "logs",
+    "user_data_file": "user_data.json"
+  },
+  "ui": {
+    "jupiter_color": "yellow",
+    "user_color": "magenta"
+  },
+  "discord": {
+    "enabled": false,
+    "token": "",
+    "allowed_servers": [],
+    "allowed_channels": [],
+    "observation_timeout": 300,
+    "name_variations": [ "jupiter", "jup" ],
+    "response_threshold": 0.7,
+    "max_history_per_channel": 50,
+    "user_mapping_file": "discord_users.json"
+  }
 }

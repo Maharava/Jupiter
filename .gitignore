@@ -9,3 +9,4 @@ utils/cModels/run
 utils/cModels/vectorizer.joblib
 
 assets/
+.env

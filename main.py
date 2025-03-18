@@ -2,6 +2,7 @@ import os
 import json
 import argparse
 import datetime
+from dotenv import load_dotenv
 
 from models.llm_client import LLMClient
 from models.user_model import UserModel
@@ -11,13 +12,21 @@ from ui.gui_interface import GUIInterface
 from core.info_extractor import InfoExtractor
 from core.chat_engine import ChatEngine
 
+load_dotenv()
+
 def load_config():
     """Load configuration from file or use defaults"""
     config_path = "config/default_config.json"
     
     if os.path.exists(config_path):
         with open(config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            config = json.load(f)
+            
+            # Inject Discord token from environment if available
+            if 'discord' in config and os.getenv('JUPITER_DISCORD_TOKEN'):
+                config['discord']['token'] = os.getenv('JUPITER_DISCORD_TOKEN')
+                
+            return config
     else:
         # Default configuration
         return {
@@ -113,7 +122,24 @@ def main():
         config=config,
         test_mode=args.test
     )
-    
+
+    # Add Discord integration here
+    if config.get('discord', {}).get('enabled', False):
+        from utils.discord import DiscordModule
+        
+        # Initialize Discord module
+        discord_module = DiscordModule(
+            chat_engine=chat_engine,
+            user_model=user_model,
+            logger=logger,
+            config=config.get('discord', {})
+        )
+        
+        # Start in a separate thread
+        import threading
+        discord_thread = threading.Thread(target=discord_module.start, daemon=True)
+        discord_thread.start()
+
     # Run chat interface
     chat_engine.run()
 

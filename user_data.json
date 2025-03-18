@@ -18,7 +18,18 @@
             "personality": "appreciative of thoughtful AI",
             "interests": [
                 "black holes"
+            ],
+            "dislikes": [
+                "graphic detail"
             ]
+        },
+        "_vimy": {
+            "name": "_vimy",
+            "discord_id": "195791341739966464",
+            "location": null,
+            "likes": [],
+            "dislikes": [],
+            "interests": []
         }
     }
 }

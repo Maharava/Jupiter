@@ -5,7 +5,7 @@ import discord
 class MessageHandler:
     """Processes incoming Discord messages and determines Jupiter's responses"""
     
-     def __init__(self, chat_engine, user_mapper, config, client=None):
+    def __init__(self, chat_engine, user_mapper, config, client=None):
         self.chat_engine = chat_engine
         self.user_mapper = user_mapper
         self.config = config
@@ -56,7 +56,6 @@ class MessageHandler:
                 # This handles multi-chunk messages properly
                 await self._send_response(message.channel, response)
                 # OLD: await message.channel.send(response)
-        }
     
     def _is_allowed(self, message):
         """Check if message is from an allowed server and channel"""

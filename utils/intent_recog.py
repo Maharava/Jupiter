@@ -22,8 +22,8 @@ def preprocess(text):
 def load_model():
     # Construct the correct paths to the joblib files
     base_path = os.path.dirname(os.path.dirname(__file__))
-    classifier_path = os.path.join(base_path, 'cModels', 'intent_classifier.joblib')
-    vectorizer_path = os.path.join(base_path, 'cModels', 'vectorizer.joblib')
+    classifier_path = os.path.join(base_path, 'utils\cModels', 'intent_classifier.joblib')
+    vectorizer_path = os.path.join(base_path, 'utils\cModels', 'vectorizer.joblib')
     
     classifier = load(classifier_path)
     vectorizer = load(vectorizer_path)
