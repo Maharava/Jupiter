@@ -312,14 +312,14 @@ class GUIInterface:
         try:
             if self.current_view == "knowledge":
                 return
-                
+                    
             # Clean up any pending operations
             self._cleanup_pending_operations()
-                
-            # Hide chat
+                    
+            # Hide chat frame but keep input frame in its current position
             self.chat_frame.pack_forget()
             
-            # Show knowledge
+            # Show knowledge frame
             self.knowledge_frame.pack(fill=tk.BOTH, expand=True)
             
             # Change button in input area
@@ -1274,9 +1274,9 @@ class GUIInterface:
         # Get input from queue
         user_input = self.input_queue.get()
         
-        # Display user message (only if it's not an exit command from window closing)
-        if user_input.lower() != "exit" or not self.input_queue.empty():
-            self.output_queue.put({"type": "user", "text": user_input})
+        # Always display user message regardless of exit command
+        # This ensures the message appears in the chat window
+        self.output_queue.put({"type": "user", "text": user_input})
         
         return user_input
     

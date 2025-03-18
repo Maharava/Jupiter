@@ -10,12 +10,13 @@ class InfoExtractor:
     Processes logs during startup and ensures each log is only processed once.
     """
     
-    def __init__(self, llm_client, user_model, logs_folder, prompt_folder, test_mode=False):
+    def __init__(self, llm_client, user_model, logs_folder, prompt_folder, ui=None, test_mode=False):
         """Initialize the info extractor"""
         self.llm_client = llm_client
         self.user_model = user_model
         self.logs_folder = logs_folder
         self.prompt_folder = prompt_folder
+        self.ui = ui  # Store the UI object
         self.test_mode = test_mode
         
         # Load extraction prompt
@@ -254,12 +255,15 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
         if self.test_mode:
             print("TEST MODE: Skipping log processing")
             return
-            
+                
         # Get unprocessed logs
         unprocessed_logs = self.get_unprocessed_logs()
         
         if not unprocessed_logs:
             print("InfoExtractor: No new logs to process")
+            # Update status if UI is available
+            if self.ui and hasattr(self.ui, 'set_status'):
+                self.ui.set_status("Ready", False)
             return
         
         print(f"InfoExtractor: Found {len(unprocessed_logs)} unprocessed log files")
@@ -267,5 +271,8 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
         # Process each log
         for log_file in unprocessed_logs:
             self.process_log_file(log_file)
-            
+                
         print(f"InfoExtractor: Finished processing {len(unprocessed_logs)} log files")
+        # Update status if UI is available
+        if self.ui and hasattr(self.ui, 'set_status'):
+            self.ui.set_status("Ready", False)

@@ -96,7 +96,8 @@ def main():
         user_model=user_model,
         logs_folder=config['paths']['logs_folder'],
         prompt_folder=config['paths']['prompt_folder'],
-        test_mode=args.test  # Pass test mode to info extractor
+        ui=ui,  # Pass the UI object
+        test_mode=args.test
     )
     
     # Process any unprocessed logs (skip in test mode)

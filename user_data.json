@@ -1,7 +1,24 @@
 {
     "known_users": {
         "Reece": {
-            "name": "Reece"
+            "name": "Reece",
+            "likes": [
+                "conversations"
+            ],
+            "personality": "appreciative of thoughtful AI",
+            "interests": [
+                "black holes"
+            ]
+        },
+        "Jupiter": {
+            "name": "Jupiter",
+            "likes": [
+                "conversations"
+            ],
+            "personality": "appreciative of thoughtful AI",
+            "interests": [
+                "black holes"
+            ]
         }
     }
 }

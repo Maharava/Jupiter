@@ -1,11 +1,11 @@
 # Ignore the 'models' folder inside 'piper'
-piper/models/
+utils/piper/models/
 
 # Ignore the 'pkgconfig' folder inside 'piper'
-piper/pkgconfig/
+utils/piper/pkgconfig/
 
-cModels/intent_classifier.joblib
-cModels/run
-cModels/vectorizer.joblib
+utils/cModels/intent_classifier.joblib
+utils/cModels/run
+utils/cModels/vectorizer.joblib
 
 assets/

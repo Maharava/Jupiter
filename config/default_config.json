@@ -15,5 +15,11 @@
     "ui": {
         "jupiter_color": "yellow",
         "user_color": "magenta"
+    },
+    "discord": {
+        "enabled": false,
+        "token": "",
+        "allowed_servers": [],
+        "allowed_channels": []
     }
 }
