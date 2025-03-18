@@ -1,0 +1,1 @@
+python train_intent_model.py

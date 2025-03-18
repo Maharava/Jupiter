@@ -21,10 +21,10 @@ def preprocess(text):
 
 # Training data with similar sentences
 training_sentences = [
-    "shutdown","exit","close","what time is it","do you have the time","tell me the time","whats the time"
+    "what time is it","do you have the time","tell me the time","whats the time","play some music","I want some music"
 ]
 training_labels = [
-    "shut_down","shut_down","shut_down","current_time","current_time","current_time","current_time"
+    "tell_time","tell_time","tell_time","tell_time","play_music","play_music"
 ]
 
 # Vectorize the sentences
@@ -36,7 +36,7 @@ classifier = LogisticRegression()
 classifier.fit(X_train, training_labels)
 
 # Save the trained model and vectorizer to a file
-dump(classifier, 'cModels\\intent_classifier.joblib')
-dump(vectorizer, 'cModels\\vectorizer.joblib')
+dump(classifier, 'intent_classifier.joblib')
+dump(vectorizer, 'vectorizer.joblib')
 
 print("Training complete and model saved successfully.")

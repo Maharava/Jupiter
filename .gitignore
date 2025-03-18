@@ -3,3 +3,9 @@ piper/models/
 
 # Ignore the 'pkgconfig' folder inside 'piper'
 piper/pkgconfig/
+
+cModels/intent_classifier.joblib
+cModels/run
+cModels/vectorizer.joblib
+
+assets/

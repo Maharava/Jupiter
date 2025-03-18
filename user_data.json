@@ -1,12 +1,7 @@
 {
     "known_users": {
         "Reece": {
-            "name": "Reece",
-            "family": "wife, Lauren, son, Jason (3)",
-            "profession": "government",
-            "likes": [
-                "working with AI"
-            ]
+            "name": "Reece"
         }
     }
 }

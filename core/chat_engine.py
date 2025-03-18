@@ -2,6 +2,8 @@ import os
 import json
 import datetime
 
+from utils.intent_recog import load_model, get_intent
+from utils.voice_cmd import intent_functions
 from utils.text_processing import count_tokens, truncate_to_token_limit
 
 class ChatEngine:
@@ -23,18 +25,13 @@ class ChatEngine:
         os.makedirs(config['paths']['prompt_folder'], exist_ok=True)
         os.makedirs(config['paths']['logs_folder'], exist_ok=True)
         
-        # Initialize TTS if enabled
-        self.use_tts = config.get('tts', {}).get('enabled', False)
-        if self.use_tts:
-            try:
-                from utils.tts_manager import TTSManager
-                self.tts_manager = TTSManager()
-            except Exception as e:
-                print(f"Failed to initialize TTS: {e}")
-                self.use_tts = False
-                self.tts_manager = None
-        else:
-            self.tts_manager = None
+        # Load intent recognition model
+        try:
+            self.intent_classifier, self.intent_vectorizer = load_model()
+        except Exception as e:
+            print(f"Failed to load intent model: {e}")
+            self.intent_classifier = None
+            self.intent_vectorizer = None
         
         if self.test_mode:
             print(f"🧪 ChatEngine initialized in TEST MODE")
@@ -432,6 +429,37 @@ Available commands:
             if self.ui.handle_exit_command(user_input):
                 break
             
+            # Check for intents before command handling
+            if self.intent_classifier and self.intent_vectorizer:
+                predicted_intent = get_intent(user_input, self.intent_classifier, self.intent_vectorizer)
+                
+                if predicted_intent is not None:
+                    # Intent recognized, execute corresponding function
+                    if predicted_intent in intent_functions:
+                        # Get the function from the map
+                        command_func = intent_functions[predicted_intent]
+                        
+                        # For functions that need context
+                        if predicted_intent == "shut_down":
+                            core_prompt = self.load_system_prompt()
+                            context = self.format_user_information()
+                            response = command_func(core_prompt, context)
+                        else:
+                            response = command_func()
+                            
+                        # Display and log response
+                        self.ui.print_jupiter_message(response)
+                        self.logger.log_message("Jupiter:", response)
+                        
+                        # Reset status if UI supports it
+                        if hasattr(self.ui, 'set_status'):
+                            if self.test_mode:
+                                self.ui.set_status("TEST MODE - Ready")
+                            else:
+                                self.ui.set_status("Ready")
+                                
+                        continue  # Skip LLM - go back to waiting for next input
+            
             # Set busy status
             if hasattr(self.ui, 'set_status'):
                 status_text = "Processing your request..."
@@ -478,27 +506,12 @@ Available commands:
             self.ui.print_jupiter_message(response)
             self.logger.log_message("Jupiter:", response)
             
-            # Speak response if TTS is enabled
-            if self.use_tts and self.tts_manager:
-                # Optional: Callback function when speech completes
-                def speech_complete():
-                    if hasattr(self.ui, 'set_status'):
-                        self.ui.set_status("Ready")
-                
-                # Start speech in background
-                self.tts_manager.speak(response, callback=speech_complete)
-                
-                # Update status if UI supports it
-                if hasattr(self.ui, 'set_status'):
-                    self.ui.set_status("Speaking...")
-            
             # Add response to history
             self.conversation_history.append(f"Jupiter: {response}")
             
-            # Reset status if not speaking
-            if not (self.use_tts and self.tts_manager):
-                if hasattr(self.ui, 'set_status'):
-                    if self.test_mode:
-                        self.ui.set_status("TEST MODE - Ready")
-                    else:
-                        self.ui.set_status("Ready")
+            # Reset status
+            if hasattr(self.ui, 'set_status'):
+                if self.test_mode:
+                    self.ui.set_status("TEST MODE - Ready")
+                else:
+                    self.ui.set_status("Ready")

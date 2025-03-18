@@ -16,10 +16,4 @@
         "jupiter_color": "yellow",
         "user_color": "magenta"
     }
-    "tts": {
-        "enabled": true,
-        "default_voice": "en_US-lessac-medium",
-        "piper_path": null,
-        "models_dir": null
-    }
 }
