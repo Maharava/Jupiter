@@ -1,0 +1,143 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Jupiter Test Report</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            h1 { color: #333366; }
+            .summary { background-color: #f0f0f0; padding: 10px; margin-bottom: 20px; }
+            .success { color: green; }
+            .failure { color: red; }
+            .error { color: darkred; }
+            .skip { color: orange; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            tr:nth-child(even) { background-color: #f2f2f2; }
+            th { background-color: #333366; color: white; }
+            .details { margin-top: 10px; border-left: 3px solid #ccc; padding-left: 10px; }
+            pre { background-color: #f9f9f9; padding: 10px; overflow: auto; }
+        </style>
+    </head>
+    <body>
+        <h1>Jupiter Test Report</h1>
+        <div class="summary">
+            <h2>Summary</h2>
+            <p><strong>Run Date:</strong> 2025-03-19 20:08:44</p>
+            <p><strong>Run Time:</strong> 0.95 seconds</p>
+            <p><strong>Tests Run:</strong> 40</p>
+            <p><strong>Successes:</strong> <span class="success">34</span></p>
+            <p><strong>Failures:</strong> <span class="failure">5</span></p>
+            <p><strong>Errors:</strong> <span class="error">1</span></p>
+            <p><strong>Skipped:</strong> <span class="skip">0</span></p>
+            <p><strong>Success Rate:</strong> 85.0%</p>
+        </div>
+    
+        <h2>Failures</h2>
+        <table>
+            <tr>
+                <th>Test</th>
+                <th>Details</th>
+            </tr>
+        
+            <tr>
+                <td>unit_tests.test_calendar.TestCalendarCommands.test_add_event_command</td>
+                <td>
+                    <div class="details">
+                        <pre>Traceback (most recent call last):
+  File &quot;C:\Users\rford\Local\HomeAI\AllInOne\jupiter_tests\unit_tests\test_calendar.py&quot;, line 394, in test_add_event_command
+    self.assertEqual(events[0][&#x27;location&#x27;], &#x27;Conference Room&#x27;)
+AssertionError: &#x27;2:00&#x27; != &#x27;Conference Room&#x27;
+- 2:00
++ Conference Room
+
+</pre>
+                    </div>
+                </td>
+            </tr>
+            
+            <tr>
+                <td>unit_tests.test_calendar.TestCalendarCommands.test_show_events_command</td>
+                <td>
+                    <div class="details">
+                        <pre>Traceback (most recent call last):
+  File &quot;C:\Users\rford\Local\HomeAI\AllInOne\jupiter_tests\unit_tests\test_calendar.py&quot;, line 438, in test_show_events_command
+    self.assertIn(&#x27;Tomorrow Event&#x27;, response)
+AssertionError: &#x27;Tomorrow Event&#x27; not found in &#x27;Events for Wednesday, March 19, 2025:\n\n**Wednesday, March 19, 2025**\n- 09:00 AM: Morning Meeting\n- 12:00 PM: Lunch Appointment at Cafe\n\n&#x27;
+</pre>
+                    </div>
+                </td>
+            </tr>
+            
+            <tr>
+                <td>unit_tests.test_calendar.TestCalendarManager.test_get_schedule_density</td>
+                <td>
+                    <div class="details">
+                        <pre>Traceback (most recent call last):
+  File &quot;C:\Users\rford\Local\HomeAI\AllInOne\jupiter_tests\unit_tests\test_calendar.py&quot;, line 321, in test_get_schedule_density
+    self.assertGreater(medium_density, 0.2)
+AssertionError: 0.16428571428571428 not greater than 0.2
+</pre>
+                    </div>
+                </td>
+            </tr>
+            
+            <tr>
+                <td>unit_tests.test_calendar.TestPromptEnhancer.test_enhance_prompt_with_no_events</td>
+                <td>
+                    <div class="details">
+                        <pre>Traceback (most recent call last):
+  File &quot;C:\Users\rford\Local\HomeAI\AllInOne\jupiter_tests\unit_tests\test_calendar.py&quot;, line 505, in test_enhance_prompt_with_no_events
+    self.assertIn(&#x27;Calendar Information&#x27;, no_events_prompt)
+AssertionError: &#x27;Calendar Information&#x27; not found in &quot;\n        I am Jupiter, an AI assistant.\n        \n        # Personality\n        I&#x27;m helpful, knowledgeable, and friendly.\n        \n### Schedule Status\nThe user has a relatively open schedule for the next 7 days.\n&quot;
+</pre>
+                    </div>
+                </td>
+            </tr>
+            
+            <tr>
+                <td>unit_tests.test_info_extractor.TestInfoExtractor.test_read_log_file</td>
+                <td>
+                    <div class="details">
+                        <pre>Traceback (most recent call last):
+  File &quot;C:\Users\rford\Local\HomeAI\AllInOne\jupiter_tests\unit_tests\test_info_extractor.py&quot;, line 187, in test_read_log_file
+    self.assertEqual(messages[0][&quot;role&quot;], &quot;TestUser:&quot;)
+AssertionError: &#x27;TestUser&#x27; != &#x27;TestUser:&#x27;
+- TestUser
++ TestUser:
+?         +
+
+</pre>
+                    </div>
+                </td>
+            </tr>
+            
+        </table>
+        
+        <h2>Errors</h2>
+        <table>
+            <tr>
+                <th>Test</th>
+                <th>Details</th>
+            </tr>
+        
+            <tr>
+                <td>unit_tests.test_llm_client.TestLLMClient.test_extract_information</td>
+                <td>
+                    <div class="details">
+                        <pre>Traceback (most recent call last):
+  File &quot;C:\Users\rford\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py&quot;, line 1379, in patched
+    return func(*newargs, **newkeywargs)
+  File &quot;C:\Users\rford\Local\HomeAI\AllInOne\jupiter_tests\unit_tests\test_llm_client.py&quot;, line 112, in test_extract_information
+    mock_post.return_value = MockResponse({&quot;response&quot;: json.dumps(extracted_info)})
+UnboundLocalError: local variable &#x27;json&#x27; referenced before assignment
+</pre>
+                    </div>
+                </td>
+            </tr>
+            
+        </table>
+        
+    </body>
+    </html>
+    
