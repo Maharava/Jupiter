@@ -1,0 +1,63 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Jupiter Test Report</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            h1 { color: #333366; }
+            .summary { background-color: #f0f0f0; padding: 10px; margin-bottom: 20px; }
+            .success { color: green; }
+            .failure { color: red; }
+            .error { color: darkred; }
+            .skip { color: orange; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            tr:nth-child(even) { background-color: #f2f2f2; }
+            th { background-color: #333366; color: white; }
+            .details { margin-top: 10px; border-left: 3px solid #ccc; padding-left: 10px; }
+            pre { background-color: #f9f9f9; padding: 10px; overflow: auto; }
+        </style>
+    </head>
+    <body>
+        <h1>Jupiter Test Report</h1>
+        <div class="summary">
+            <h2>Summary</h2>
+            <p><strong>Run Date:</strong> 2025-03-19 20:26:02</p>
+            <p><strong>Run Time:</strong> 0.07 seconds</p>
+            <p><strong>Tests Run:</strong> 25</p>
+            <p><strong>Successes:</strong> <span class="success">24</span></p>
+            <p><strong>Failures:</strong> <span class="failure">1</span></p>
+            <p><strong>Errors:</strong> <span class="error">0</span></p>
+            <p><strong>Skipped:</strong> <span class="skip">0</span></p>
+            <p><strong>Success Rate:</strong> 96.0%</p>
+        </div>
+    
+        <h2>Failures</h2>
+        <table>
+            <tr>
+                <th>Test</th>
+                <th>Details</th>
+            </tr>
+        
+            <tr>
+                <td>unit_tests.test_info_extractor.TestInfoExtractor.test_read_log_file</td>
+                <td>
+                    <div class="details">
+                        <pre>Traceback (most recent call last):
+  File &quot;C:\Users\rford\Local\HomeAI\AllInOne\jupiter_tests\unit_tests\test_info_extractor.py&quot;, line 191, in test_read_log_file
+    self.assertEqual(user_prefix, &quot;TestUser:&quot;)
+AssertionError: &#x27;Jupiter&#x27; != &#x27;TestUser:&#x27;
+- Jupiter
++ TestUser:
+
+</pre>
+                    </div>
+                </td>
+            </tr>
+            
+        </table>
+        
+    </body>
+    </html>
+    

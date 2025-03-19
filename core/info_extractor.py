@@ -128,12 +128,21 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
                         role = role.strip()
                         message = message.strip()
                         
-                        if role != "Jupiter:" and role != "InfoExtractor:" and role != "InfoExtractor Error:":
-                            user_prefix = role
+                        # Make sure role includes colon
+                        if not role.endswith(':'):
+                            role_with_colon = f"{role}:"
+                        else:
+                            role_with_colon = role
+                        
+                        # Identify user_prefix (any non-system role)
+                        system_roles = ["Jupiter:", "InfoExtractor:", "InfoExtractor Error:"]
+                        if role_with_colon not in system_roles:
+                            if not user_prefix:  # Only set if not already set
+                                user_prefix = role_with_colon
                         
                         # Only include actual conversation messages
-                        if role == "Jupiter:" or (user_prefix and role == user_prefix):
-                            messages.append({"role": role, "message": message})
+                        if role_with_colon == "Jupiter:" or role_with_colon == user_prefix:
+                            messages.append({"role": role_with_colon, "message": message})
         except Exception as e:
             print(f"InfoExtractor Error: Failed to read log file {log_file}: {str(e)}")
         

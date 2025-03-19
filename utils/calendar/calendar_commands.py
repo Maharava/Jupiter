@@ -18,7 +18,7 @@ class CalendarCommands:
         
         # Command patterns with their handlers
         self.commands = {
-            r'add(?:\s+event)?\s+(.+?)\s+(?:on|at)\s+(.+?)(?:\s+(?:to|until)\s+(.+?))?(?:\s+(?:at|in)\s+(.+?))?(?:\s*$|\s+(.+)$)':
+            r'add(?:\s+event)?\s+(.+?)\s+(?:on|at)\s+(.+?)(?:\s+(?:to|until)\s+(.+?))?(?:\s+(?:at)\s+(.+?))?(?:\s+(?:in|at)\s+(.+?))?(?:\s*$|\s+(.+)$)'
                 self._handle_add_event,
             r'show\s+(?:events?|calendar)(?:\s+(?:for|on)\s+(.+?))?(?:\s*$|\s+(.+)$)':
                 self._handle_show_events,

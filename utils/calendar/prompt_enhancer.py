@@ -62,8 +62,13 @@ class PromptEnhancer:
         # Get upcoming events
         events = self.calendar_manager.get_events_by_daterange(user_id, today.isoformat(), end_date.isoformat())
         
+        # Always start with the Calendar Information header
+        calendar_context = "\n\n## Calendar Information\n"
+        
         if not events:
-            return self._get_availability_context(user_id, days_to_check)
+            # If no events, just add the availability context
+            calendar_context += self._get_availability_context(user_id, days_to_check)
+            return calendar_context
             
         # Group events by date
         events_by_date = {}

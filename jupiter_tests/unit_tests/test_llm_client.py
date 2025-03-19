@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+import json
 from unittest.mock import patch, MagicMock
 
 # Add parent directory to path to allow importing Jupiter modules
@@ -127,7 +128,6 @@ class TestLLMClient(unittest.TestCase):
         self.assertIn("Melbourne", response)
         
         # Parse the response to verify structure
-        import json
         extracted = json.loads(response)
         self.assertIn("extracted_info", extracted)
         self.assertEqual(len(extracted["extracted_info"]), 2)
@@ -148,13 +148,10 @@ class TestLLMClient(unittest.TestCase):
         response = client.extract_information("Extract user information", "Test conversation")
         
         # Check response format
-        import json
         extracted = json.loads(response)
         self.assertIn("extracted_info", extracted)
         self.assertEqual(len(extracted["extracted_info"]), 0)  # Empty in test mode
-    
-    # This test needs to import json module
-    import json
+
 
 if __name__ == '__main__':
     unittest.main()

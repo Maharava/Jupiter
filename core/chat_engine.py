@@ -252,23 +252,7 @@ Available commands:
             return help_text
         
         # Not a command, return None to continue normal processing
-        return None        elif user_input.startswith('/calendar'):
-            # Handle special calendar commands
-            # Check for preferences command
-            if user_input.lower() == '/calendar preferences' and hasattr(self.ui, 'root'):
-                try:
-                    from utils.calendar.preferences_ui import show_preferences_dialog
-                    # Show preferences dialog
-                    self.ui.root.after(0, lambda: show_preferences_dialog(self.ui.root))
-                    return "Opening calendar notification preferences..."
-                except (ImportError, AttributeError) as e:
-                    return "Calendar preferences are not available in this mode."
-                
-            # Handle other calendar commands
-            user_id = self.user_model.current_user.get('name')
-            response = process_calendar_command(user_id, user_input)
-            llm_speak("Here's your calendar information.")  # Simplified for speech
-            return response
+        return None        
             
     def __del__(self):
         """Clean up when the object is destroyed"""

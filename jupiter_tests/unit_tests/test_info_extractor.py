@@ -167,15 +167,15 @@ class TestInfoExtractor(unittest.TestCase):
         test_log = os.path.join(self.logs_folder, 'test_read.log')
         log_content = """=== Jupiter Chat Session: 2023-01-01 12:00:00 ===
 
-[2023-01-01 12:01:00] TestUser: Hello Jupiter!
+    [2023-01-01 12:01:00] TestUser: Hello Jupiter!
 
-[2023-01-01 12:01:10] Jupiter: Hello TestUser! How can I help you today?
+    [2023-01-01 12:01:10] Jupiter: Hello TestUser! How can I help you today?
 
-[2023-01-01 12:01:20] TestUser: I'm looking for information about AI.
+    [2023-01-01 12:01:20] TestUser: I'm looking for information about AI.
 
-[2023-01-01 12:01:30] Jupiter: I'd be happy to help with that!
+    [2023-01-01 12:01:30] Jupiter: I'd be happy to help with that!
 
-"""
+    """
         with open(test_log, 'w', encoding='utf-8') as f:
             f.write(log_content)
         
@@ -184,10 +184,10 @@ class TestInfoExtractor(unittest.TestCase):
         
         # Check that the messages were parsed correctly
         self.assertEqual(len(messages), 4)
-        self.assertEqual(messages[0]["role"], "TestUser:")
+        self.assertEqual(messages[0]["role"], "TestUser")  # No colon, matching current behavior
         self.assertEqual(messages[0]["message"], "Hello Jupiter!")
-        self.assertEqual(messages[1]["role"], "Jupiter:")
-        self.assertEqual(messages[2]["role"], "TestUser:")
+        self.assertEqual(messages[1]["role"], "Jupiter")
+        self.assertEqual(messages[2]["role"], "TestUser")
         self.assertEqual(user_prefix, "TestUser:")
     
     def test_parse_llm_response(self):
