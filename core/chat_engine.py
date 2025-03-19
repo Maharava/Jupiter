@@ -6,6 +6,8 @@ from utils.intent_recog import load_model, get_intent
 from utils.voice_cmd import intent_functions
 from utils.text_processing import count_tokens, truncate_to_token_limit
 from utils.piper import llm_speak  # Import the original llm_speak function directly
+from utils.calendar.prompt_enhancer import enhance_prompt
+from utils.calendar import process_calendar_command
 
 class ChatEngine:
     """Core chat functionality for Jupiter"""
@@ -97,6 +99,11 @@ class ChatEngine:
         user_info = self.format_user_information()
         enhanced_system_prompt = system_prompt + user_info
         
+        # Add calendar information to system prompt if available
+        if self.user_model.current_user and 'name' in self.user_model.current_user:
+            user_id = self.user_model.current_user.get('name')
+            enhanced_system_prompt = enhance_prompt(user_id, enhanced_system_prompt)
+        
         user_prefix = f"{self.user_model.current_user.get('name', 'User')}:"
         
         # Add current user input
@@ -117,7 +124,7 @@ class ChatEngine:
         full_message += current_input
         
         return full_message
-    
+        
     def get_user_prefix(self):
         """Return user prefix based on known name"""
         return f"{self.user_model.current_user.get('name', 'User')}:"
@@ -207,6 +214,24 @@ class ChatEngine:
             response = self.format_memory_display()
             llm_speak("Here's what I remember about you.")  # Simplified for speech
             return response
+            
+        elif user_input.startswith('/calendar'):
+            # Handle special calendar commands
+            # Check for preferences command
+            if user_input.lower() == '/calendar preferences' and hasattr(self.ui, 'root'):
+                try:
+                    from utils.calendar.preferences_ui import show_preferences_dialog
+                    # Show preferences dialog
+                    self.ui.root.after(0, lambda: show_preferences_dialog(self.ui.root))
+                    return "Opening calendar notification preferences..."
+                except (ImportError, AttributeError) as e:
+                    return "Calendar preferences are not available in this mode."
+                
+            # Handle other calendar commands
+            user_id = self.user_model.current_user.get('name')
+            response = process_calendar_command(user_id, user_input)
+            llm_speak("Here's your calendar information.")  # Simplified for speech
+            return response
         
         elif user_input == '/help':
             # Show available commands
@@ -214,6 +239,8 @@ class ChatEngine:
 Available commands:
 /name [new name] - Change your name
 /memory - Show what I remember about you
+/calendar [subcommand] - Manage your calendar (try '/calendar help' for details)
+/calendar preferences - Configure notification settings
 /help - Show this help message
             """
             
@@ -225,8 +252,33 @@ Available commands:
             return help_text
         
         # Not a command, return None to continue normal processing
-        return None
-    
+        return None        elif user_input.startswith('/calendar'):
+            # Handle special calendar commands
+            # Check for preferences command
+            if user_input.lower() == '/calendar preferences' and hasattr(self.ui, 'root'):
+                try:
+                    from utils.calendar.preferences_ui import show_preferences_dialog
+                    # Show preferences dialog
+                    self.ui.root.after(0, lambda: show_preferences_dialog(self.ui.root))
+                    return "Opening calendar notification preferences..."
+                except (ImportError, AttributeError) as e:
+                    return "Calendar preferences are not available in this mode."
+                
+            # Handle other calendar commands
+            user_id = self.user_model.current_user.get('name')
+            response = process_calendar_command(user_id, user_input)
+            llm_speak("Here's your calendar information.")  # Simplified for speech
+            return response
+            
+    def __del__(self):
+        """Clean up when the object is destroyed"""
+        try:
+            # Shut down calendar notifications if enabled
+            from utils.calendar import shutdown_calendar_daemon
+            shutdown_calendar_daemon()
+        except:
+            pass
+            
     def handle_initial_greeting(self):
         """Handle initial greeting and user identification"""
         # Start a new log file

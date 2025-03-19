@@ -60,6 +60,13 @@ class GUIInterface:
         # Set up window close handler
         self.root.protocol("WM_DELETE_WINDOW", self.handle_window_close)
         
+        # Initialize calendar notifications if available
+        try:
+            from utils.calendar import initialize_calendar_daemon
+            initialize_calendar_daemon(gui_root=self.root, terminal_ui=None, enable_voice=True)
+        except ImportError:
+            pass
+        
         # Try to load icon
         assets_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
         if not os.path.exists(assets_dir):
@@ -120,6 +127,23 @@ class GUIInterface:
             command=self._handle_knowledge
         )
         knowledge_button.pack(side=tk.LEFT, padx=5)
+        
+        # Create Calendar Preferences button if available
+        try:
+            from utils.calendar.preferences_ui import show_preferences_dialog
+            calendar_button = tk.Button(
+                button_frame,
+                text="Calendar",
+                bg="#333",
+                fg="white",
+                relief=tk.FLAT,
+                padx=10,
+                pady=2,
+                command=lambda: show_preferences_dialog(self.root)
+            )
+            calendar_button.pack(side=tk.LEFT, padx=5)
+        except ImportError:
+            pass
         
         # Create chat frame (initially visible)
         self.chat_frame = tk.Frame(self.root, bg="black")

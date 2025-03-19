@@ -123,6 +123,19 @@ def main():
         test_mode=args.test
     )
 
+    # Initialize calendar notification system if enabled
+    if config.get('calendar', {}).get('enable_notifications', True):
+        from utils.calendar import initialize_calendar_daemon
+        
+        # Initialize with appropriate UI
+        if args.gui:
+            # For GUI mode, pass the root window later
+            # We'll set this up in the GUI interface after it's ready
+            pass
+        else:
+            # For terminal mode, pass the terminal UI
+            initialize_calendar_daemon(gui_root=None, terminal_ui=ui, enable_voice=True)
+
     # Add Discord integration here
     if config.get('discord', {}).get('enabled', False):
         from utils.discord import DiscordModule
