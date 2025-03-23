@@ -1,8 +1,10 @@
-# Update discord_client.py to include better error handling
+# Update discord_client.py with thread safety improvements
 
 import discord
 import asyncio
 import traceback
+import threading
+import queue
 from .message_handler import MessageHandler
 from .user_mapper import UserMapper
 from .response_formatter import ResponseFormatter
@@ -36,6 +38,11 @@ class DiscordClient:
             client=self  # Pass self reference
         )
         
+        # Add thread safety with a request queue and lock
+        self.request_queue = queue.Queue()
+        self.user_lock = threading.Lock()
+        self.processing_thread = None
+        
         # Set up event handlers
         self.setup_event_handlers()
     
@@ -44,6 +51,9 @@ class DiscordClient:
         async def on_ready():
             self.discord_logger.log_info(f"Logged in as {self.client.user}")
             self.is_running = True
+            
+            # Start the request processing thread when Discord is ready
+            self.start_processing_thread()
         
         @self.client.event
         async def on_message(message):
@@ -52,17 +62,69 @@ class DiscordClient:
                 if message.author == self.client.user:
                     return
                 
-                # Process the message
-                await self.message_handler.handle_message(message)
+                # Instead of processing directly, add to queue
+                self.request_queue.put(message)
+                
             except Exception as e:
                 self.discord_logger.log_error(
-                    f"Error processing message: {message.content}", e
+                    f"Error queuing message: {message.content}", e
                 )
                 traceback.print_exc()
         
         @self.client.event
         async def on_error(event, *args, **kwargs):
             self.discord_logger.log_error(f"Discord error in {event}")
+    
+    def start_processing_thread(self):
+        """Start a thread to process messages from the queue"""
+        if self.processing_thread is None or not self.processing_thread.is_alive():
+            self.processing_thread = threading.Thread(
+                target=self._process_message_queue,
+                daemon=True,
+                name="DiscordMessageProcessor"
+            )
+            self.processing_thread.start()
+            self.discord_logger.log_info("Started Discord message processing thread")
+    
+    def _process_message_queue(self):
+        """Process messages from the queue sequentially"""
+        while self.is_running:
+            try:
+                # Get message from queue (with timeout to allow checking is_running)
+                try:
+                    message = self.request_queue.get(timeout=0.5)
+                except queue.Empty:
+                    continue
+                
+                # Process the message with exclusive access to user data
+                self._process_single_message(message)
+                
+                # Mark task as done
+                self.request_queue.task_done()
+                
+            except Exception as e:
+                self.discord_logger.log_error(f"Error in message queue processor: {e}")
+                
+    def _process_single_message(self, message):
+        """Process a single Discord message with proper locking"""
+        try:
+            # Use a lock to ensure exclusive access to user data
+            with self.user_lock:
+                # Let the message handler process the message
+                # This will be run in our dedicated thread, not the Discord event loop
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                try:
+                    loop.run_until_complete(self.message_handler.handle_message(message))
+                finally:
+                    loop.close()
+                    
+        except Exception as e:
+            self.discord_logger.log_error(
+                f"Error processing Discord message: {message.content}", e
+            )
+            traceback.print_exc()
     
     def generate_response(self, jupiter_user, message_text):
         """Generate a response from Jupiter without modifying its core"""
@@ -71,20 +133,21 @@ class DiscordClient:
         
         try:
             # Set Jupiter's current user to the Discord user
-            self.chat_engine.user_model.set_current_user(jupiter_user)
-            
-            # Prepare message for LLM (reusing Jupiter's own method)
-            llm_message = self.chat_engine.prepare_message_for_llm(message_text)
-            
-            # Generate response using Jupiter's LLM client
-            response = self.chat_engine.llm_client.generate_chat_response(
-                llm_message, 
-                temperature=self.chat_engine.config['llm']['chat_temperature']
-            )
-            
-            # Format response for Discord
-            formatted_response = self.response_formatter.format_response(response)
-            return formatted_response
+            with self.user_lock:  # Add lock to prevent user switching conflicts
+                self.chat_engine.user_model.set_current_user(jupiter_user)
+                
+                # Prepare message for LLM (reusing Jupiter's own method)
+                llm_message = self.chat_engine.prepare_message_for_llm(message_text)
+                
+                # Generate response using Jupiter's LLM client
+                response = self.chat_engine.llm_client.generate_chat_response(
+                    llm_message, 
+                    temperature=self.chat_engine.config['llm']['chat_temperature']
+                )
+                
+                # Format response for Discord
+                formatted_response = self.response_formatter.format_response(response)
+                return formatted_response
         
         except Exception as e:
             self.discord_logger.log_error("Error generating response", e)
@@ -92,7 +155,8 @@ class DiscordClient:
         
         finally:
             # Restore original user
-            self.chat_engine.user_model.set_current_user(original_user)
+            with self.user_lock:  # Add lock here too
+                self.chat_engine.user_model.set_current_user(original_user)
     
     def start(self):
         """Start the Discord bot"""
@@ -110,6 +174,12 @@ class DiscordClient:
     def stop(self):
         """Stop the Discord bot"""
         self.is_running = False
+        
+        # Wait for processing thread to finish
+        if self.processing_thread and self.processing_thread.is_alive():
+            self.processing_thread.join(timeout=2.0)
+        
+        # Stop Discord client
         asyncio.run_coroutine_threadsafe(
             self.client.close(), self.client.loop
         )

@@ -1,6 +1,9 @@
+# Update message_handler.py with thread safety improvements
+
 import asyncio
 import re
 import discord
+import time
 
 class MessageHandler:
     """Processes incoming Discord messages and determines Jupiter's responses"""
@@ -39,8 +42,9 @@ class MessageHandler:
         
         if should_respond:
             # Mark channel as active
+            current_time = time.time()
             self.active_channels[message.channel.id] = {
-                'timestamp': asyncio.get_event_loop().time(),
+                'timestamp': current_time,
                 'timeout': self.config["observation_timeout"]
             }
             
@@ -50,12 +54,11 @@ class MessageHandler:
                 user_input = message.content
                 
                 # Generate response through Jupiter's chat engine
-                response = await self._get_jupiter_response(jupiter_user, user_input)
+                # This now happens in the dedicated processing thread
+                response = self.client.generate_response(jupiter_user, user_input)
                 
-                # CHANGED: Use _send_response method instead of direct send
-                # This handles multi-chunk messages properly
+                # Send response using the helper method
                 await self._send_response(message.channel, response)
-                # OLD: await message.channel.send(response)
     
     def _is_allowed(self, message):
         """Check if message is from an allowed server and channel"""
@@ -109,7 +112,7 @@ class MessageHandler:
         channel_id = message.channel.id
         if channel_id in self.active_channels:
             # Check if the timeout has expired
-            current_time = asyncio.get_event_loop().time()
+            current_time = time.time()
             active_info = self.active_channels[channel_id]
             
             if current_time - active_info['timestamp'] < active_info['timeout']:
@@ -121,18 +124,6 @@ class MessageHandler:
                 
         return False
     
-    async def _get_jupiter_response(self, jupiter_user, user_input):
-        """Get response from Jupiter in a non-blocking way"""
-        loop = asyncio.get_event_loop()
-        
-        def _call_jupiter():
-            # Use the client directly, avoiding circular imports
-            return self.client.generate_response(jupiter_user, user_input)
-        
-        # Run Jupiter's processing in a thread pool
-        response = await loop.run_in_executor(None, _call_jupiter)
-        return response
-        
     async def _send_response(self, channel, response):
         """Send response, handling multiple chunks if needed"""
         if isinstance(response, list):

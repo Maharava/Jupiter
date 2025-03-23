@@ -1202,98 +1202,108 @@ class GUIInterface:
         return f"#{r:02x}{g:02x}{b:02x}"
     
     def _process_messages(self):
-        """Process messages in the output queue"""
+        """Process messages in the output queue with improved thread safety"""
         while True:
             try:
                 # Get message from queue
                 message = self.output_queue.get()
                 
-                # Process based on message type
+                # Process based on message type - all updates now safely in main thread
                 if message["type"] == "jupiter":
-                    self._display_jupiter_message(message["text"])
+                    self._schedule_safe_update(lambda: self._display_jupiter_message(message["text"]))
                 elif message["type"] == "user":
-                    self._display_user_message(message["text"])
+                    self._schedule_safe_update(lambda: self._display_user_message(message["text"]))
                 elif message["type"] == "update_prefix":
-                    self._update_user_prefix(message["prefix"])
+                    self._schedule_safe_update(lambda: self._update_user_prefix(message["prefix"]))
                 elif message["type"] == "status":
-                    self._update_status(message["text"], message.get("color", "#4CAF50"))
+                    self._schedule_safe_update(lambda: self._update_status(message["text"], message.get("color", "#4CAF50")))
                 elif message["type"] == "clear":
-                    self._clear_chat()
+                    self._schedule_safe_update(lambda: self._clear_chat())
                 
                 # Mark as done
                 self.output_queue.task_done()
             except Exception as e:
                 print(f"Error processing message: {e}")
+                
+    def _schedule_safe_update(self, update_func):
+        """Schedule a UI update to run safely on the main thread"""
+        if self.root and self.root.winfo_exists():
+            after_id = self.root.after(0, update_func)
+            # Keep track of scheduled task IDs
+            if hasattr(self, '_pending_after_ids'):
+                self._pending_after_ids.append(after_id)
+                
+    def _clear_chat(self):
+        """Clear the chat display with thread safety"""
+        try:
+            # This method now runs in the main thread
+            # Enable editing
+            if self.chat_text and self.chat_text.winfo_exists():
+                self.chat_text.config(state=tk.NORMAL)
+                
+                # Clear all text
+                self.chat_text.delete(1.0, tk.END)
+                
+                # Disable editing
+                self.chat_text.config(state=tk.DISABLED)
+        except Exception as e:
+            print(f"Error clearing chat: {e}")
     
     def _display_jupiter_message(self, message):
-        """Display a message from Jupiter in the chat with improved memory management"""
-        def update_display():
-            try:
-                # Enable editing
-                if self.chat_text and self.chat_text.winfo_exists():
-                    self.chat_text.config(state=tk.NORMAL)
-                    
-                    # Add prefix
-                    self.chat_text.insert(tk.END, "Jupiter: ", "jupiter_prefix")
-                    self.chat_text.insert(tk.END, "\n")
-                    
-                    # Add message in bubble
-                    bubble_start = self.chat_text.index(tk.INSERT)
-                    self.chat_text.insert(tk.END, f"{message}\n\n")
-                    bubble_end = self.chat_text.index(tk.INSERT)
-                    
-                    # Apply bubble tag
-                    self.chat_text.tag_add("jupiter_bubble", bubble_start, bubble_end)
-                    
-                    # Scroll to bottom
-                    self.chat_text.see(tk.END)
-                    
-                    # Disable editing
-                    self.chat_text.config(state=tk.DISABLED)
-            except Exception as e:
-                print(f"Error updating display: {e}")
-        
-        # Schedule on main thread
-        if self.root and self.root.winfo_exists():
-            after_id = self.root.after(0, update_display)
-            # Keep track of scheduled task IDs
-            if hasattr(self, '_pending_after_ids'):
-                self._pending_after_ids.append(after_id)
+        """Display a message from Jupiter in the chat with thread safety"""
+        try:
+            # This method now runs in the main thread
+            # Enable editing
+            if self.chat_text and self.chat_text.winfo_exists():
+                self.chat_text.config(state=tk.NORMAL)
+                
+                # Add prefix
+                self.chat_text.insert(tk.END, "Jupiter: ", "jupiter_prefix")
+                self.chat_text.insert(tk.END, "\n")
+                
+                # Add message in bubble
+                bubble_start = self.chat_text.index(tk.INSERT)
+                self.chat_text.insert(tk.END, f"{message}\n\n")
+                bubble_end = self.chat_text.index(tk.INSERT)
+                
+                # Apply bubble tag
+                self.chat_text.tag_add("jupiter_bubble", bubble_start, bubble_end)
+                
+                # Scroll to bottom
+                self.chat_text.see(tk.END)
+                
+                # Disable editing
+                self.chat_text.config(state=tk.DISABLED)
+        except Exception as e:
+            print(f"Error updating display: {e}")
     
     def _display_user_message(self, message):
-        """Display a message from the user in the chat with improved memory management"""
-        def update_display():
-            try:
-                # Enable editing
-                if self.chat_text and self.chat_text.winfo_exists():
-                    self.chat_text.config(state=tk.NORMAL)
-                    
-                    # Add prefix
-                    self.chat_text.insert(tk.END, f"{self.user_prefix}: ", "user_prefix")
-                    self.chat_text.insert(tk.END, "\n")
-                    
-                    # Add message in bubble
-                    bubble_start = self.chat_text.index(tk.INSERT)
-                    self.chat_text.insert(tk.END, f"{message}\n\n")
-                    bubble_end = self.chat_text.index(tk.INSERT)
-                    
-                    # Apply bubble tag
-                    self.chat_text.tag_add("user_bubble", bubble_start, bubble_end)
-                    
-                    # Scroll to bottom
-                    self.chat_text.see(tk.END)
-                    
-                    # Disable editing
-                    self.chat_text.config(state=tk.DISABLED)
-            except Exception as e:
-                print(f"Error updating display: {e}")
-        
-        # Schedule on main thread
-        if self.root and self.root.winfo_exists():
-            after_id = self.root.after(0, update_display)
-            # Keep track of scheduled task IDs
-            if hasattr(self, '_pending_after_ids'):
-                self._pending_after_ids.append(after_id)
+        """Display a message from the user in the chat with thread safety"""
+        try:
+            # This method now runs in the main thread
+            # Enable editing
+            if self.chat_text and self.chat_text.winfo_exists():
+                self.chat_text.config(state=tk.NORMAL)
+                
+                # Add prefix
+                self.chat_text.insert(tk.END, f"{self.user_prefix}: ", "user_prefix")
+                self.chat_text.insert(tk.END, "\n")
+                
+                # Add message in bubble
+                bubble_start = self.chat_text.index(tk.INSERT)
+                self.chat_text.insert(tk.END, f"{message}\n\n")
+                bubble_end = self.chat_text.index(tk.INSERT)
+                
+                # Apply bubble tag
+                self.chat_text.tag_add("user_bubble", bubble_start, bubble_end)
+                
+                # Scroll to bottom
+                self.chat_text.see(tk.END)
+                
+                # Disable editing
+                self.chat_text.config(state=tk.DISABLED)
+        except Exception as e:
+            print(f"Error updating display: {e}")
     
     def clear_chat(self):
         """Clear the chat display with improved memory management"""
@@ -1319,24 +1329,15 @@ class GUIInterface:
                 self._pending_after_ids.append(after_id)
     
     def _update_user_prefix(self, prefix):
-        """Update the user prefix in the GUI"""
-        def update():
-            if self.user_label:
-                self.user_label.config(text=f"{prefix}:")
-        
-        # Schedule on main thread
-        if self.root:
-            self.root.after(0, update)
+        """Update the user prefix in the GUI with thread safety"""
+        if self.user_label and self.user_label.winfo_exists():
+            self.user_prefix = prefix
+            self.user_label.config(text=f"{prefix}:")
     
     def _update_status(self, status_text, color="#4CAF50"):
-        """Update the status label in the GUI"""
-        def update():
-            if self.status_label:
-                self.status_label.config(text=status_text, fg=color)
-        
-        # Schedule on main thread
-        if self.root:
-            self.root.after(0, update)
+        """Update the status label in the GUI with thread safety"""
+        if self.status_label and self.status_label.winfo_exists():
+            self.status_label.config(text=status_text, fg=color)
             
     def set_status(self, status_text, is_busy=False):
         """Set the status message in the GUI"""
@@ -1475,27 +1476,48 @@ class GUIInterface:
             self.root.after(0, self.root.destroy)
     
     def process_knowledge_edits(self):
-        """Process all queued knowledge edits with error handling"""
+        """Process all queued knowledge edits with thread safety"""
+        try:
+            # Create a local copy of edits to process to avoid long lock
+            local_edits = []
+            
+            # Get all pending edits from the queue
+            while not self.knowledge_edit_queue.empty():
+                try:
+                    edit = self.knowledge_edit_queue.get_nowait()
+                    local_edits.append(edit)
+                    self.knowledge_edit_queue.task_done()
+                except Exception as e:
+                    print(f"Error getting edit from queue: {e}")
+                    break
+                    
+            # If no edits, return early
+            if not local_edits:
+                return
+            
+            # Schedule processing on main thread
+            self._schedule_safe_update(lambda: self._process_knowledge_edits_batch(local_edits))
+                    
+        except Exception as e:
+            self._show_error(f"Error processing knowledge edits: {e}")
+            
+    def _process_knowledge_edits_batch(self, edits):
+        """Process a batch of knowledge edits on the main thread"""
         edits_processed = 0
         errors = 0
         
-        try:
-            # Process all edits in the queue
-            while not self.knowledge_edit_queue.empty():
-                try:
-                    edit = self.knowledge_edit_queue.get()
-                    # Print for debugging
-                    print(f"Processing knowledge edit: {edit}")
-                    
-                    # In a real implementation, this would be passed to the chat engine
-                    # which would update the user model
-                    edits_processed += 1
-                except Exception as e:
-                    errors += 1
-                    print(f"Error processing edit {edits_processed + errors}: {e}")
-                    
-            # If we had errors, show a status message
-            if errors > 0:
-                self.set_status(f"Warning: {errors} edit(s) failed to process", False)
-        except Exception as e:
-            self._show_error(f"Error processing knowledge edits: {e}")
+        for edit in edits:
+            try:
+                # Print for debugging
+                print(f"Processing knowledge edit: {edit}")
+                
+                # In a real implementation, this would notify the chat engine
+                # to update the user model
+                edits_processed += 1
+            except Exception as e:
+                errors += 1
+                print(f"Error processing edit {edits_processed + errors}: {e}")
+                
+        # If we had errors, show a status message
+        if errors > 0:
+            self.set_status(f"Warning: {errors} edit(s) failed to process", False)
