@@ -7,6 +7,9 @@
     "extraction_temperature": 0.2,
     "token_limit": 8192
   },
+  "chat": {
+    "max_history_messages": 100
+  },
   "paths": {
     "prompt_folder": "prompts",
     "logs_folder": "logs",
@@ -28,9 +31,9 @@
     "user_mapping_file": "discord_users.json"
   },
   "calendar": {
-  "enable_notifications": true,
-  "notification_check_interval": 60,
-  "prompt_detail_level": "normal",
-  "default_reminder_minutes": 15
+    "enable_notifications": true,
+    "notification_check_interval": 60,
+    "prompt_detail_level": "normal",
+    "default_reminder_minutes": 15
   }
 }

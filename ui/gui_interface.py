@@ -336,19 +336,24 @@ class GUIInterface:
         try:
             if self.current_view == "knowledge":
                 return
-                    
-            # Clean up any pending operations
+            
+            # Clean up any pending operations and references
             self._cleanup_pending_operations()
-                    
+            
             # Hide chat frame but keep input frame in its current position
-            self.chat_frame.pack_forget()
+            if self.chat_frame.winfo_exists():
+                self.chat_frame.pack_forget()
             
             # Show knowledge frame
-            self.knowledge_frame.pack(fill=tk.BOTH, expand=True)
+            if self.knowledge_frame.winfo_exists():
+                self.knowledge_frame.pack(fill=tk.BOTH, expand=True)
             
             # Change button in input area
-            self.send_button.pack_forget()
-            self.close_button.pack(side=tk.RIGHT, padx=(5, 0))
+            if self.send_button.winfo_exists():
+                self.send_button.pack_forget()
+            
+            if self.close_button.winfo_exists():
+                self.close_button.pack(side=tk.RIGHT, padx=(5, 0))
             
             # Update state
             self.current_view = "knowledge"
@@ -365,26 +370,56 @@ class GUIInterface:
         try:
             if self.current_view == "chat":
                 return
-                
+            
             # Clean up any pending operations
             self._cleanup_pending_operations()
-                
+            
             # Properly handle UI repositioning
-            self.knowledge_frame.pack_forget()
+            if self.knowledge_frame.winfo_exists():
+                self.knowledge_frame.pack_forget()
             
-            # Remove all existing widgets from chat frame to avoid layout issues
-            for widget in self.chat_frame.winfo_children():
-                widget.pack_forget()
-            
-            # Re-add chat text with proper layout
-            self.chat_text.pack(fill=tk.BOTH, expand=True)
-            
-            # Now show chat frame
-            self.chat_frame.pack(fill=tk.BOTH, expand=True)
+            # Recreate chat text widget to avoid memory issues
+            if self.chat_frame.winfo_exists():
+                # Remove all existing widgets from chat frame
+                for widget in self.chat_frame.winfo_children():
+                    widget.destroy()
+                
+                # Create new chat text widget
+                self.chat_text = scrolledtext.ScrolledText(
+                    self.chat_frame,
+                    wrap=tk.WORD,
+                    bg="black",
+                    fg="white",
+                    insertbackground="white",
+                    selectbackground="#666",
+                    selectforeground="white",
+                    font=("Helvetica", 10),
+                    padx=10,
+                    pady=10
+                )
+                self.chat_text.pack(fill=tk.BOTH, expand=True)
+                self.chat_text.config(state=tk.DISABLED)  # Make read-only
+                
+                # Reconfigure text tags
+                self.chat_text.tag_configure("jupiter_prefix", foreground=self._get_color(self.jupiter_color))
+                self.chat_text.tag_configure("jupiter_bubble", background=self._get_color(self.jupiter_color, 0.7), 
+                                            foreground="black", relief=tk.SOLID, borderwidth=1, lmargin1=10, lmargin2=10, 
+                                            rmargin=10, spacing1=3, spacing3=3)
+                
+                self.chat_text.tag_configure("user_prefix", foreground=self._get_color(self.user_color))
+                self.chat_text.tag_configure("user_bubble", background=self._get_color(self.user_color, 0.7), 
+                                            foreground="white", relief=tk.SOLID, borderwidth=1, lmargin1=10, lmargin2=10, 
+                                            rmargin=10, spacing1=3, spacing3=3)
+                
+                # Show chat frame
+                self.chat_frame.pack(fill=tk.BOTH, expand=True)
             
             # Change button in input area
-            self.close_button.pack_forget()
-            self.send_button.pack(side=tk.RIGHT, padx=(5, 0))
+            if self.close_button.winfo_exists():
+                self.close_button.pack_forget()
+            
+            if self.send_button.winfo_exists():
+                self.send_button.pack(side=tk.RIGHT, padx=(5, 0))
             
             # Update state
             self.current_view = "chat"
@@ -394,6 +429,11 @@ class GUIInterface:
             
             # Update status
             self.set_status("Ready", False)
+            
+            # Force garbage collection
+            import gc
+            gc.collect()
+            
         except Exception as e:
             self._show_error(f"Error showing chat view: {str(e)}")
     
@@ -402,16 +442,31 @@ class GUIInterface:
         try:
             # Clear any stored bubble references
             if hasattr(self, '_list_bubbles'):
-                self._list_bubbles = []
-                
-            # Cancel any pending after() calls (requires tracking them)
+                self._list_bubbles.clear()
+            
+            # Cancel any pending after() calls
             if hasattr(self, '_pending_after_ids'):
                 for after_id in self._pending_after_ids:
                     try:
-                        self.root.after_cancel(after_id)
-                    except:
+                        if self.root and self.root.winfo_exists():
+                            self.root.after_cancel(after_id)
+                    except Exception:
                         pass
-                self._pending_after_ids = []
+                self._pending_after_ids.clear()
+            
+            # Clean up knowledge window content
+            if hasattr(self, 'knowledge_content') and self.knowledge_content:
+                for widget in self.knowledge_content.winfo_children():
+                    widget.destroy()
+            
+            # Clean up any stored refs to large data
+            if hasattr(self, '_cached_data'):
+                self._cached_data.clear()
+            
+            # Force Python garbage collection
+            import gc
+            gc.collect()
+        
         except Exception as e:
             print(f"Error during cleanup: {e}")
     
@@ -1171,76 +1226,97 @@ class GUIInterface:
                 print(f"Error processing message: {e}")
     
     def _display_jupiter_message(self, message):
-        """Display a message from Jupiter in the chat"""
+        """Display a message from Jupiter in the chat with improved memory management"""
         def update_display():
-            # Enable editing
-            self.chat_text.config(state=tk.NORMAL)
-            
-            # Add prefix
-            self.chat_text.insert(tk.END, "Jupiter: ", "jupiter_prefix")
-            self.chat_text.insert(tk.END, "\n")
-            
-            # Add message in bubble
-            bubble_start = self.chat_text.index(tk.INSERT)
-            self.chat_text.insert(tk.END, f"{message}\n\n")
-            bubble_end = self.chat_text.index(tk.INSERT)
-            
-            # Apply bubble tag
-            self.chat_text.tag_add("jupiter_bubble", bubble_start, bubble_end)
-            
-            # Scroll to bottom
-            self.chat_text.see(tk.END)
-            
-            # Disable editing
-            self.chat_text.config(state=tk.DISABLED)
+            try:
+                # Enable editing
+                if self.chat_text and self.chat_text.winfo_exists():
+                    self.chat_text.config(state=tk.NORMAL)
+                    
+                    # Add prefix
+                    self.chat_text.insert(tk.END, "Jupiter: ", "jupiter_prefix")
+                    self.chat_text.insert(tk.END, "\n")
+                    
+                    # Add message in bubble
+                    bubble_start = self.chat_text.index(tk.INSERT)
+                    self.chat_text.insert(tk.END, f"{message}\n\n")
+                    bubble_end = self.chat_text.index(tk.INSERT)
+                    
+                    # Apply bubble tag
+                    self.chat_text.tag_add("jupiter_bubble", bubble_start, bubble_end)
+                    
+                    # Scroll to bottom
+                    self.chat_text.see(tk.END)
+                    
+                    # Disable editing
+                    self.chat_text.config(state=tk.DISABLED)
+            except Exception as e:
+                print(f"Error updating display: {e}")
         
         # Schedule on main thread
-        if self.root:
-            self.root.after(0, update_display)
+        if self.root and self.root.winfo_exists():
+            after_id = self.root.after(0, update_display)
+            # Keep track of scheduled task IDs
+            if hasattr(self, '_pending_after_ids'):
+                self._pending_after_ids.append(after_id)
     
     def _display_user_message(self, message):
-        """Display a message from the user in the chat"""
+        """Display a message from the user in the chat with improved memory management"""
         def update_display():
-            # Enable editing
-            self.chat_text.config(state=tk.NORMAL)
-            
-            # Add prefix
-            self.chat_text.insert(tk.END, f"{self.user_prefix}: ", "user_prefix")
-            self.chat_text.insert(tk.END, "\n")
-            
-            # Add message in bubble
-            bubble_start = self.chat_text.index(tk.INSERT)
-            self.chat_text.insert(tk.END, f"{message}\n\n")
-            bubble_end = self.chat_text.index(tk.INSERT)
-            
-            # Apply bubble tag
-            self.chat_text.tag_add("user_bubble", bubble_start, bubble_end)
-            
-            # Scroll to bottom
-            self.chat_text.see(tk.END)
-            
-            # Disable editing
-            self.chat_text.config(state=tk.DISABLED)
+            try:
+                # Enable editing
+                if self.chat_text and self.chat_text.winfo_exists():
+                    self.chat_text.config(state=tk.NORMAL)
+                    
+                    # Add prefix
+                    self.chat_text.insert(tk.END, f"{self.user_prefix}: ", "user_prefix")
+                    self.chat_text.insert(tk.END, "\n")
+                    
+                    # Add message in bubble
+                    bubble_start = self.chat_text.index(tk.INSERT)
+                    self.chat_text.insert(tk.END, f"{message}\n\n")
+                    bubble_end = self.chat_text.index(tk.INSERT)
+                    
+                    # Apply bubble tag
+                    self.chat_text.tag_add("user_bubble", bubble_start, bubble_end)
+                    
+                    # Scroll to bottom
+                    self.chat_text.see(tk.END)
+                    
+                    # Disable editing
+                    self.chat_text.config(state=tk.DISABLED)
+            except Exception as e:
+                print(f"Error updating display: {e}")
         
         # Schedule on main thread
-        if self.root:
-            self.root.after(0, update_display)
+        if self.root and self.root.winfo_exists():
+            after_id = self.root.after(0, update_display)
+            # Keep track of scheduled task IDs
+            if hasattr(self, '_pending_after_ids'):
+                self._pending_after_ids.append(after_id)
     
-    def _clear_chat(self):
-        """Clear the chat display"""
+    def clear_chat(self):
+        """Clear the chat display with improved memory management"""
         def update_display():
-            # Enable editing
-            self.chat_text.config(state=tk.NORMAL)
-            
-            # Clear all text
-            self.chat_text.delete(1.0, tk.END)
-            
-            # Disable editing
-            self.chat_text.config(state=tk.DISABLED)
+            try:
+                # Enable editing
+                if self.chat_text and self.chat_text.winfo_exists():
+                    self.chat_text.config(state=tk.NORMAL)
+                    
+                    # Clear all text
+                    self.chat_text.delete(1.0, tk.END)
+                    
+                    # Disable editing
+                    self.chat_text.config(state=tk.DISABLED)
+            except Exception as e:
+                print(f"Error clearing chat: {e}")
         
         # Schedule on main thread
-        if self.root:
-            self.root.after(0, update_display)
+        if self.root and self.root.winfo_exists():
+            after_id = self.root.after(0, update_display)
+            # Keep track of scheduled task IDs
+            if hasattr(self, '_pending_after_ids'):
+                self._pending_after_ids.append(after_id)
     
     def _update_user_prefix(self, prefix):
         """Update the user prefix in the GUI"""
@@ -1321,18 +1397,80 @@ class GUIInterface:
         return False
     
     def handle_window_close(self):
-        """Handle window close event (X button)"""
+        """Handle window close event (X button) with proper cleanup"""
+        # Mark running state as false to stop threads
         self.is_running = False
-        # Put exit message in queue to break the input waiting loop
+        
+        # Clean up any pending operations
+        self._cleanup_pending_operations()
+        
+        # Put exit message in queue to break input waiting loop
         self.input_queue.put("exit")
         self.input_ready.set()
+        
+        # Clear queues to prevent memory leaks
+        while not self.input_queue.empty():
+            try:
+                self.input_queue.get_nowait()
+            except:
+                pass
+        
+        while not self.output_queue.empty():
+            try:
+                self.output_queue.get_nowait()
+            except:
+                pass
+        
+        while not self.knowledge_edit_queue.empty():
+            try:
+                self.knowledge_edit_queue.get_nowait()
+            except:
+                pass
+        
+        # Cancel all scheduled callbacks
+        if self.root:
+            for after_id in self.root.tk.call('after', 'info'):
+                try:
+                    self.root.after_cancel(after_id)
+                except:
+                    pass
+        
+        # Force garbage collection
+        import gc
+        gc.collect()
+        
         # Destroy the window
         if self.root:
             self.root.destroy()
         
     def exit_program(self):
-        """Exit the program"""
+        """Exit the program with proper cleanup"""
         self.is_running = False
+        self._cleanup_pending_operations()
+        
+        # Clear all queues
+        while not self.input_queue.empty():
+            try:
+                self.input_queue.get_nowait()
+            except:
+                pass
+                
+        while not self.output_queue.empty():
+            try:
+                self.output_queue.get_nowait()
+            except:
+                pass
+                
+        while not self.knowledge_edit_queue.empty():
+            try:
+                self.knowledge_edit_queue.get_nowait()
+            except:
+                pass
+        
+        # Force one last garbage collection
+        import gc
+        gc.collect()
+        
         if self.root:
             self.root.after(0, self.root.destroy)
     

@@ -20,35 +20,42 @@ def load_config():
     config_path = "config/default_config.json"
     
     if os.path.exists(config_path):
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-            
-            # Inject Discord token from environment if available
-            if 'discord' in config and os.getenv('JUPITER_DISCORD_TOKEN'):
-                config['discord']['token'] = os.getenv('JUPITER_DISCORD_TOKEN')
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
                 
-            return config
-    else:
-        # Default configuration
-        return {
-            "llm": {
-                "provider": "ollama",
-                "api_url": "http://localhost:11434",
-                "default_model": "gemma3",
-                "chat_temperature": 0.7,
-                "extraction_temperature": 0.2,
-                "token_limit": 8192
-            },
-            "paths": {
-                "prompt_folder": "prompts",
-                "logs_folder": "logs",
-                "user_data_file": "user_data.json"
-            },
-            "ui": {
-                "jupiter_color": "yellow",
-                "user_color": "magenta"
-            }
+                # Inject Discord token from environment if available
+                if 'discord' in config and os.getenv('JUPITER_DISCORD_TOKEN'):
+                    config['discord']['token'] = os.getenv('JUPITER_DISCORD_TOKEN')
+                    
+                return config
+        except Exception as e:
+            print(f"Error loading configuration: {e}")
+            # Fall back to default config
+    
+    # Default configuration (fallback)
+    return {
+        "llm": {
+            "provider": "ollama",
+            "api_url": "http://localhost:11434",
+            "default_model": "gemma3",
+            "chat_temperature": 0.7,
+            "extraction_temperature": 0.2,
+            "token_limit": 8192
+        },
+        "chat": {
+            "max_history_messages": 100
+        },
+        "paths": {
+            "prompt_folder": "prompts",
+            "logs_folder": "logs",
+            "user_data_file": "user_data.json"
+        },
+        "ui": {
+            "jupiter_color": "yellow",
+            "user_color": "magenta"
         }
+    }
 
 def main():
     """Main entry point for Jupiter Chat"""

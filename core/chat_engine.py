@@ -21,8 +21,9 @@ class ChatEngine:
         self.config = config
         self.test_mode = test_mode
         
-        # Initialize conversation history
+        # Initialize conversation history with a maximum size
         self.conversation_history = []
+        self.max_history_messages = config.get('chat', {}).get('max_history_messages', 100)
         
         # Create necessary folders
         os.makedirs(config['paths']['prompt_folder'], exist_ok=True)
@@ -38,6 +39,16 @@ class ChatEngine:
         
         if self.test_mode:
             print(f"🧪 ChatEngine initialized in TEST MODE")
+    
+    def add_to_conversation_history(self, message):
+        """Add a message to conversation history with size management"""
+        self.conversation_history.append(message)
+        
+        # Trim history if it exceeds maximum size
+        if len(self.conversation_history) > self.max_history_messages:
+            # Remove oldest messages that exceed our limit
+            excess = len(self.conversation_history) - self.max_history_messages
+            self.conversation_history = self.conversation_history[excess:]
     
     def load_system_prompt(self):
         """Load system prompt from file"""
@@ -558,8 +569,8 @@ Available commands:
             # Log user message
             self.logger.log_message(user_prefix, user_input)
             
-            # Add user input to history
-            self.conversation_history.append(f"{user_prefix} {user_input}")
+            # Add user input to history with memory management
+            self.add_to_conversation_history(f"{user_prefix} {user_input}")
             
             # Update status to show Jupiter is generating a response
             if hasattr(self.ui, 'set_status'):
@@ -582,8 +593,8 @@ Available commands:
             # Speak the response directly
             llm_speak(response)
             
-            # Add response to history
-            self.conversation_history.append(f"Jupiter: {response}")
+            # Add response to history with memory management
+            self.add_to_conversation_history(f"Jupiter: {response}")
             
             # Reset status
             if hasattr(self.ui, 'set_status'):
