@@ -5,13 +5,13 @@ from .config import DiscordConfig
 class DiscordModule:
     """Main integration point for Jupiter Discord functionality"""
     
-    def __init__(self, chat_engine, user_model, logger, config=None):
+    def __init__(self, chat_engine, user_data_manager, logger, config=None):
         from .config import DiscordConfig
         
         self.config = DiscordConfig(config)
         self.client = DiscordClient(
             chat_engine=chat_engine,
-            user_model=user_model,
+            user_data_manager=user_data_manager,
             logger=logger,
             config=self.config
         )

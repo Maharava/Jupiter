@@ -5,17 +5,17 @@ import datetime
 from utils.intent_recog import load_model, get_intent
 from utils.voice_cmd import intent_functions
 from utils.text_processing import count_tokens, truncate_to_token_limit
-from utils.piper import llm_speak  # Import the original llm_speak function directly
+from utils.piper import llm_speak
 from utils.calendar.prompt_enhancer import enhance_prompt
 from utils.calendar import process_calendar_command
 
 class ChatEngine:
     """Core chat functionality for Jupiter"""
     
-    def __init__(self, llm_client, user_model, logger, ui, config, test_mode=False):
+    def __init__(self, llm_client, user_data_manager, logger, ui, config, test_mode=False):
         """Initialize chat engine with dependencies"""
         self.llm_client = llm_client
-        self.user_model = user_model
+        self.user_data_manager = user_data_manager
         self.logger = logger
         self.ui = ui
         self.config = config
@@ -46,7 +46,6 @@ class ChatEngine:
         
         # Trim history if it exceeds maximum size
         if len(self.conversation_history) > self.max_history_messages:
-            # Remove oldest messages that exceed our limit
             excess = len(self.conversation_history) - self.max_history_messages
             self.conversation_history = self.conversation_history[excess:]
     
@@ -76,7 +75,7 @@ class ChatEngine:
     
     def format_user_information(self):
         """Format user information for inclusion in system prompt"""
-        user_info = self.user_model.current_user
+        user_info = self.user_data_manager.current_user
         
         if not user_info or len(user_info) <= 1:  # Only contains name
             return ""
@@ -111,11 +110,11 @@ class ChatEngine:
         enhanced_system_prompt = system_prompt + user_info
         
         # Add calendar information to system prompt if available
-        if self.user_model.current_user and 'name' in self.user_model.current_user:
-            user_id = self.user_model.current_user.get('name')
+        if self.user_data_manager.current_user and 'name' in self.user_data_manager.current_user:
+            user_id = self.user_data_manager.current_user.get('name')
             enhanced_system_prompt = enhance_prompt(user_id, enhanced_system_prompt)
         
-        user_prefix = f"{self.user_model.current_user.get('name', 'User')}:"
+        user_prefix = f"{self.user_data_manager.current_user.get('name', 'User')}:"
         
         # Add current user input
         current_input = f"{user_prefix} {user_input}\nJupiter:"
@@ -138,11 +137,11 @@ class ChatEngine:
         
     def get_user_prefix(self):
         """Return user prefix based on known name"""
-        return f"{self.user_model.current_user.get('name', 'User')}:"
+        return f"{self.user_data_manager.current_user.get('name', 'User')}:"
     
     def format_memory_display(self):
         """Format user memory information for display"""
-        user_info = self.user_model.current_user
+        user_info = self.user_data_manager.current_user
         
         # Start with header
         memory_display = "Here's what I remember about you:\n\n"
@@ -210,8 +209,8 @@ class ChatEngine:
             new_name = user_input[6:].strip()
             if new_name:
                 # Update user name
-                self.user_model.current_user['name'] = new_name
-                self.user_model.save_current_user()
+                self.user_data_manager.current_user['name'] = new_name
+                self.user_data_manager.save_current_user()
                 response = f"I'll call you {new_name} from now on."
                 llm_speak(response)  # Speak the response
                 return response
@@ -239,7 +238,7 @@ class ChatEngine:
                     return "Calendar preferences are not available in this mode."
                 
             # Handle other calendar commands
-            user_id = self.user_model.current_user.get('name')
+            user_id = self.user_data_manager.current_user.get('name')
             response = process_calendar_command(user_id, user_input)
             llm_speak("Here's your calendar information.")  # Simplified for speech
             return response
@@ -304,44 +303,35 @@ Available commands:
                 self.ui.print_jupiter_message(prompt)
                 llm_speak(prompt)
         
-        # Load all user data
-        all_user_data = self.user_model.load_all_users()
+        # Identify user and get user data
+        user_data, actual_name = self.user_data_manager.identify_user(name)
+        self.user_data_manager.set_current_user(user_data)
         
-        # Check if this is a returning user (case insensitive)
-        if 'known_users' in all_user_data:
-            # Convert all stored names to lowercase for comparison
-            name_map = {user_name.lower(): user_name for user_name in all_user_data['known_users']}
+        # Check if this is a returning user
+        if actual_name.lower() == name.lower() and actual_name != name:
+            # This is a returning user with different capitalization
+            welcome = f"Welcome back, {actual_name}! It's great to chat with you again."
+            if self.test_mode:
+                welcome += " (TEST MODE ACTIVE)"
             
-            # Check if the lowercase version of the entered name exists
-            if name.lower() in name_map:
-                # Use the properly capitalized name from the stored data
-                actual_name = name_map[name.lower()]
-                
-                # Load user data
-                user_data = all_user_data['known_users'][actual_name]
-                self.user_model.set_current_user(user_data)
-                
-                # Greeting with test mode notice if applicable
-                welcome = f"Welcome back, {actual_name}! It's great to chat with you again."
-                if self.test_mode:
-                    welcome += " (TEST MODE ACTIVE)"
-                
-                self.ui.print_jupiter_message(welcome)
-                llm_speak(f"Welcome back, {actual_name}! It's great to chat with you again.")
-                    
-                return
-        
-        # New user
-        self.user_model.set_current_user({'name': name})
-        self.user_model.save_current_user()
-        
-        # Greeting with test mode notice if applicable
-        greeting = f"Nice to meet you, {name}! How can I help you today?"
-        if self.test_mode:
-            greeting += " (TEST MODE ACTIVE)"
-        
-        self.ui.print_jupiter_message(greeting)
-        llm_speak(f"Nice to meet you, {name}! How can I help you today?")
+            self.ui.print_jupiter_message(welcome)
+            llm_speak(f"Welcome back, {actual_name}! It's great to chat with you again.")
+        elif 'likes' in user_data or 'interests' in user_data:
+            # This is a returning user with known preferences
+            welcome = f"Welcome back, {actual_name}! It's great to chat with you again."
+            if self.test_mode:
+                welcome += " (TEST MODE ACTIVE)"
+            
+            self.ui.print_jupiter_message(welcome)
+            llm_speak(f"Welcome back, {actual_name}! It's great to chat with you again.")
+        else:
+            # New user or user without preferences
+            greeting = f"Nice to meet you, {name}! How can I help you today?"
+            if self.test_mode:
+                greeting += " (TEST MODE ACTIVE)"
+            
+            self.ui.print_jupiter_message(greeting)
+            llm_speak(f"Nice to meet you, {name}! How can I help you today?")
     
     def restart_chat(self):
         """Restart chat session while preserving user data"""
@@ -368,7 +358,7 @@ Available commands:
         restart_message = f"=== Jupiter Chat Restarted{test_mode_notice} ==="
         self.ui.print_jupiter_message(restart_message)
         
-        greeting = f"Hello again, {self.user_model.current_user.get('name', 'User')}! How can I help you today?"
+        greeting = f"Hello again, {self.user_data_manager.current_user.get('name', 'User')}! How can I help you today?"
         self.ui.print_jupiter_message(greeting)
         llm_speak(greeting)
         
@@ -388,7 +378,7 @@ Available commands:
             self.ui.set_status(status_text, True)
             
         # Get user data from the model
-        user_info = self.user_model.current_user
+        user_info = self.user_data_manager.current_user
         
         # Send data to UI and show knowledge view
         self.ui.create_knowledge_bubbles(user_info)
@@ -418,14 +408,14 @@ Available commands:
             # Handle different edit types
             if edit["action"] == "edit":
                 # Update simple value
-                self.user_model.current_user[edit["category"]] = edit["new_value"]
+                self.user_data_manager.current_user[edit["category"]] = edit["new_value"]
                 print(f"Updated {edit['category']} from '{edit['old_value']}' to '{edit['new_value']}'")
                 edits_processed = True
                     
             elif edit["action"] == "remove":
                 # Remove category entirely
-                if edit["category"] in self.user_model.current_user:
-                    del self.user_model.current_user[edit["category"]]
+                if edit["category"] in self.user_data_manager.current_user:
+                    del self.user_data_manager.current_user[edit["category"]]
                     print(f"Removed {edit['category']}")
                     edits_processed = True
                     
@@ -435,12 +425,12 @@ Available commands:
                 new_item = edit["value"]
                 
                 # Create list if it doesn't exist
-                if category not in self.user_model.current_user:
-                    self.user_model.current_user[category] = []
+                if category not in self.user_data_manager.current_user:
+                    self.user_data_manager.current_user[category] = []
                     
                 # Add item if it's not already in the list
-                if new_item not in self.user_model.current_user[category]:
-                    self.user_model.current_user[category].append(new_item)
+                if new_item not in self.user_data_manager.current_user[category]:
+                    self.user_data_manager.current_user[category].append(new_item)
                     print(f"Added '{new_item}' to {category}")
                     edits_processed = True
                     
@@ -450,20 +440,20 @@ Available commands:
                 item = edit["value"]
                 
                 # Remove item if list exists
-                if category in self.user_model.current_user and isinstance(self.user_model.current_user[category], list):
-                    if item in self.user_model.current_user[category]:
-                        self.user_model.current_user[category].remove(item)
+                if category in self.user_data_manager.current_user and isinstance(self.user_data_manager.current_user[category], list):
+                    if item in self.user_data_manager.current_user[category]:
+                        self.user_data_manager.current_user[category].remove(item)
                         print(f"Removed '{item}' from {category}")
                         edits_processed = True
                         
                     # If list is now empty, remove the category
-                    if not self.user_model.current_user[category]:
-                        del self.user_model.current_user[category]
+                    if not self.user_data_manager.current_user[category]:
+                        del self.user_data_manager.current_user[category]
                         print(f"Removed empty category {category}")
         
         # Save changes to user model
         if edits_processed:
-            self.user_model.save_current_user()
+            self.user_data_manager.save_current_user()
             llm_speak("Knowledge profile updated.")
     
     def run(self):

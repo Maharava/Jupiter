@@ -5,18 +5,15 @@ import datetime
 from collections import Counter
 
 class InfoExtractor:
-    """
-    Module that analyzes previous chat logs to extract important user information.
-    Processes logs during startup and ensures each log is only processed once.
-    """
+    """Analyzes chat logs to extract important user information"""
     
-    def __init__(self, llm_client, user_model, logs_folder, prompt_folder, ui=None, test_mode=False):
+    def __init__(self, llm_client, user_data_manager, logs_folder, prompt_folder, ui=None, test_mode=False):
         """Initialize the info extractor"""
         self.llm_client = llm_client
-        self.user_model = user_model
+        self.user_data_manager = user_data_manager
         self.logs_folder = logs_folder
         self.prompt_folder = prompt_folder
-        self.ui = ui  # Store the UI object
+        self.ui = ui
         self.test_mode = test_mode
         
         # Load extraction prompt
@@ -32,7 +29,7 @@ class InfoExtractor:
             print(f"🧪 InfoExtractor initialized in TEST MODE - No log processing will occur")
     
     def load_extraction_prompt(self):
-        """Load the information extraction prompt from file or create default"""
+        """Load extraction prompt from file or create default"""
         prompt_path = os.path.join(self.prompt_folder, "extraction_prompt.txt")
         if os.path.exists(prompt_path):
             with open(prompt_path, 'r', encoding='utf-8') as f:
@@ -166,11 +163,8 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
             if 'extracted_info' in data:
                 return data['extracted_info']
             return []
-        except json.JSONDecodeError:
-            print(f"InfoExtractor Error: Failed to parse JSON response: {response}")
-            return []
         except Exception as e:
-            print(f"InfoExtractor Error: Error processing LLM response: {str(e)}")
+            print(f"InfoExtractor Error: Failed to parse LLM response: {str(e)}")
             return []
     
     def identify_username_from_log(self, log_file):
@@ -234,7 +228,7 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
         # Identify username from the log
         username = user_prefix.rstrip(':') if user_prefix else self.identify_username_from_log(log_file)
         
-        # Send ONLY user messages to LLM for analysis
+        # Send user messages to LLM for analysis
         formatted_content = "\n".join(user_messages)
         llm_response = self.llm_client.extract_information(self.extraction_prompt, formatted_content)
         
@@ -242,16 +236,16 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
         extracted_info = self.parse_llm_response(llm_response)
         
         # Get user data
-        user_data = self.user_model.get_user(username)
+        user_data = self.user_data_manager.get_user(username)
         if not user_data:
             # Create new user if not found
             user_data = {'name': username}
         
         # Set as current user
-        self.user_model.set_current_user(user_data)
+        self.user_data_manager.set_current_user(user_data)
         
         # Update user data with extracted information
-        updates = self.user_model.update_user_info(extracted_info)
+        updates = self.user_data_manager.update_user_info(extracted_info)
         
         if updates:
             print(f"InfoExtractor: Updated user data for {username}: {', '.join(updates)}")

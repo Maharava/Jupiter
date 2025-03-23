@@ -5,11 +5,11 @@ import threading
 class UserMapper:
     """Maps Discord users to Jupiter users with thread safety"""
     
-    def __init__(self, user_model, config):
-        self.user_model = user_model
+    def __init__(self, user_data_manager, config):
+        self.user_data_manager = user_data_manager
         self.config = config
         self.mapping = {}
-        self.mapping_lock = threading.Lock()  # Add lock for thread safety
+        self.mapping_lock = threading.Lock()
         
         # Load existing mapping if available
         self.mapping_file = config["user_mapping_file"]
@@ -25,9 +25,8 @@ class UserMapper:
             if discord_id in self.mapping:
                 jupiter_name = self.mapping[discord_id]
                 
-                # Get user from Jupiter - this accesses user_model which is now protected
-                # by locks in the Discord client
-                jupiter_user = self.user_model.get_user(jupiter_name)
+                # Get user from Jupiter
+                jupiter_user = self.user_data_manager.get_user(jupiter_name)
                 
                 # If user found, return it
                 if jupiter_user:
@@ -43,8 +42,8 @@ class UserMapper:
         # Use Discord username as Jupiter username
         jupiter_name = discord_user.name
         
-        # Check if this name exists - this needs thread safety too
-        existing_user = self.user_model.get_user(jupiter_name)
+        # Check if this name exists
+        existing_user = self.user_data_manager.get_user(jupiter_name)
         
         if existing_user:
             # Add discriminator if name exists
@@ -63,8 +62,8 @@ class UserMapper:
         # Use lock for the entire operation
         with self.mapping_lock:
             # Set as current user and save
-            self.user_model.set_current_user(user_data)
-            self.user_model.save_current_user()
+            self.user_data_manager.set_current_user(user_data)
+            self.user_data_manager.save_current_user()
             
             # Update mapping
             self.mapping[discord_id] = jupiter_name

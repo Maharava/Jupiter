@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import time
 
 from models.llm_client import LLMClient
-from models.user_model import UserModel
+from models.user_data_manager import UserDataManager
 from utils.logger import Logger
 from ui.terminal_interface import TerminalInterface
 from ui.gui_interface import GUIInterface
@@ -31,7 +31,6 @@ def load_config():
                 return config
         except Exception as e:
             print(f"Error loading configuration: {e}")
-            # Fall back to default config
     
     # Default configuration (fallback)
     return {
@@ -72,10 +71,11 @@ def main():
     llm_client = LLMClient(
         api_url=config['llm']['api_url'],
         default_model=config['llm']['default_model'],
-        test_mode=args.test  # Pass test mode flag to LLM client
+        test_mode=args.test
     )
     
-    user_model = UserModel(config['paths']['user_data_file'])
+    # Create unified user data manager
+    user_data_manager = UserDataManager(config['paths']['user_data_file'])
     
     logger = Logger(config['paths']['logs_folder'])
     
@@ -91,11 +91,11 @@ def main():
             user_color=config['ui']['user_color']
         )
     
-    # Create folders if they don't exist
+    # Create necessary folders
     for folder in [config['paths']['prompt_folder'], config['paths']['logs_folder']]:
         os.makedirs(folder, exist_ok=True)
     
-    # Display log processing message in GUI if using it
+    # Display startup message
     if args.test:
         if args.gui and hasattr(ui, 'set_status'):
             ui.set_status("Running in TEST MODE - No LLM connection", True)
@@ -110,10 +110,10 @@ def main():
     # Initialize info extractor
     info_extractor = InfoExtractor(
         llm_client=llm_client,
-        user_model=user_model,
+        user_data_manager=user_data_manager,
         logs_folder=config['paths']['logs_folder'],
         prompt_folder=config['paths']['prompt_folder'],
-        ui=ui,  # Pass the UI object
+        ui=ui,
         test_mode=args.test
     )
     
@@ -121,10 +121,10 @@ def main():
     if not args.test:
         info_extractor.process_all_unprocessed_logs()
     
-    # Initialize chat engine with test mode flag
+    # Initialize chat engine
     chat_engine = ChatEngine(
         llm_client=llm_client,
-        user_model=user_model,
+        user_data_manager=user_data_manager,
         logger=logger,
         ui=ui,
         config=config,
@@ -135,23 +135,21 @@ def main():
     if config.get('calendar', {}).get('enable_notifications', True):
         from utils.calendar import initialize_calendar_daemon
         
-        # Initialize with appropriate UI
         if args.gui:
-            # For GUI mode, pass the root window later
-            # We'll set this up in the GUI interface after it's ready
+            # For GUI mode, set up later with root window
             pass
         else:
             # For terminal mode, pass the terminal UI
             initialize_calendar_daemon(gui_root=None, terminal_ui=ui, enable_voice=True)
 
-    # Add Discord integration here
+    # Add Discord integration if enabled
     if config.get('discord', {}).get('enabled', False):
         from utils.discord import DiscordModule
         
         # Initialize Discord module
         discord_module = DiscordModule(
             chat_engine=chat_engine,
-            user_model=user_model,
+            user_data_manager=user_data_manager,
             logger=logger,
             config=config.get('discord', {})
         )

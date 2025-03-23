@@ -1,5 +1,3 @@
-# Update discord_client.py with thread safety improvements
-
 import discord
 import asyncio
 import traceback
@@ -13,7 +11,7 @@ from .discord_logger import DiscordLogger
 class DiscordClient:
     """Handles Discord connection and events"""
     
-    def __init__(self, chat_engine, user_model, logger, config):
+    def __init__(self, chat_engine, user_data_manager, logger, config):
         self.chat_engine = chat_engine
         self.config = config
         self.is_running = False
@@ -27,15 +25,15 @@ class DiscordClient:
         self.client = discord.Client(intents=intents)
         
         # Create components
-        self.user_mapper = UserMapper(user_model, config)
+        self.user_mapper = UserMapper(user_data_manager, config)
         self.response_formatter = ResponseFormatter()
         
-        # Create message handler with client reference (self)
+        # Create message handler with client reference
         self.message_handler = MessageHandler(
             chat_engine=chat_engine,
             user_mapper=self.user_mapper,
             config=config,
-            client=self  # Pass self reference
+            client=self
         )
         
         # Add thread safety with a request queue and lock
@@ -129,12 +127,12 @@ class DiscordClient:
     def generate_response(self, jupiter_user, message_text):
         """Generate a response from Jupiter without modifying its core"""
         # Save current user state
-        original_user = self.chat_engine.user_model.current_user
+        original_user = self.chat_engine.user_data_manager.current_user
         
         try:
             # Set Jupiter's current user to the Discord user
             with self.user_lock:  # Add lock to prevent user switching conflicts
-                self.chat_engine.user_model.set_current_user(jupiter_user)
+                self.chat_engine.user_data_manager.set_current_user(jupiter_user)
                 
                 # Prepare message for LLM (reusing Jupiter's own method)
                 llm_message = self.chat_engine.prepare_message_for_llm(message_text)
@@ -155,8 +153,8 @@ class DiscordClient:
         
         finally:
             # Restore original user
-            with self.user_lock:  # Add lock here too
-                self.chat_engine.user_model.set_current_user(original_user)
+            with self.user_lock:
+                self.chat_engine.user_data_manager.set_current_user(original_user)
     
     def start(self):
         """Start the Discord bot"""
