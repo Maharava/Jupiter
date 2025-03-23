@@ -10,8 +10,8 @@ def llm_speak(text):
         return
     
     # Hard-code the exact paths since we know them
-    piper_exe = "C:\\Users\\rford\\Local\\HomeAI\\AllInOne\\piper\\piper.exe"
-    model_path = "C:\\Users\\rford\\Local\\HomeAI\\AllInOne\\piper\\models\\cori.onnx"
+    piper_exe = "C:\\Users\\rford\\Local\\HomeAI\\AllInOne\\utils\\piper\\piper.exe"
+    model_path = "C:\\Users\\rford\\Local\\HomeAI\\AllInOne\\utils\\piper\\models\\en_GB-vctk-medium.onnx"
     
     # Check if files exist
     if not os.path.exists(piper_exe):
@@ -33,7 +33,7 @@ def llm_speak(text):
     try:
         # Use a single command with the text file as input (no chunking)
         # Uses a faster speech rate with length_scale=0.65
-        generate_command = f'"{piper_exe}" -m "{model_path}" --length_scale 0.75 --output_raw < "{temp_path}" | ffplay -f s16le -ar 22050 -i pipe: -nodisp -autoexit > NUL 2>&1'
+        generate_command = f'"{piper_exe}" -m "{model_path}" --length_scale 0.9 --speaker 3 --output_raw < "{temp_path}" | ffplay -f s16le -ar 22050 -i pipe: -nodisp -autoexit > NUL 2>&1'
         
         # Run the command
         subprocess.run(generate_command, shell=True)

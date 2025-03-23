@@ -17,7 +17,7 @@
     "user_color": "magenta"
   },
   "discord": {
-    "enabled": false,
+    "enabled": true,
     "token": "",
     "allowed_servers": [],
     "allowed_channels": [],
@@ -32,4 +32,5 @@
   "notification_check_interval": 60,
   "prompt_detail_level": "normal",
   "default_reminder_minutes": 15
+  }
 }

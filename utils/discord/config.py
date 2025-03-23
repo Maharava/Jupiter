@@ -28,7 +28,10 @@ class DiscordConfig:
     def validate(self):
         """Ensure config has required fields"""
         if not self.config.get("token"):
-            raise ValueError("Discord token is required")
+            import logging
+            logging.error("Discord token is required but not provided")
+            return False
+        return True
     
     def __getitem__(self, key):
         return self.config.get(key)

@@ -3,6 +3,7 @@ import json
 import argparse
 import datetime
 from dotenv import load_dotenv
+import time
 
 from models.llm_client import LLMClient
 from models.user_model import UserModel
@@ -152,6 +153,12 @@ def main():
         import threading
         discord_thread = threading.Thread(target=discord_module.start, daemon=True)
         discord_thread.start()
+        
+        time.sleep(2)  # Give Discord client time to connect
+        if discord_module.is_running():
+            print("✅ Discord connection successful")
+        else:
+            print("⚠️ Discord failed to connect - check logs/discord.log for details")
 
     # Run chat interface
     chat_engine.run()
