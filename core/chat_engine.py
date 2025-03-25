@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+import threading
 
 from utils.intent_recog import load_model, get_intent
 from utils.voice_cmd import intent_functions
@@ -8,6 +9,7 @@ from utils.text_processing import count_tokens, truncate_to_token_limit
 from utils.piper import llm_speak
 from utils.calendar.prompt_enhancer import enhance_prompt
 from utils.calendar import process_calendar_command
+from utils.voice_manager import VoiceManager
 
 class ChatEngine:
     """Core chat functionality for Jupiter"""
@@ -36,6 +38,28 @@ class ChatEngine:
             print(f"Failed to load intent model: {e}")
             self.intent_classifier = None
             self.intent_vectorizer = None
+        
+        # Initialize voice manager
+        try:
+            # Get wake word model path from config if available
+            wake_word_model = config.get('voice', {}).get('wake_word_model', None)
+            
+            # If we have a relative path, make it absolute
+            if wake_word_model and not os.path.isabs(wake_word_model):
+                wake_word_model = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), wake_word_model)
+                
+            # Enable voice by default unless disabled in config
+            voice_enabled = config.get('voice', {}).get('enabled', True)
+            
+            self.voice_manager = VoiceManager(
+                chat_engine=self,
+                ui=ui,
+                model_path=wake_word_model,
+                enabled=voice_enabled and not test_mode  # Disable in test mode
+            )
+        except Exception as e:
+            print(f"Failed to initialize voice manager: {e}")
+            self.voice_manager = None
         
         if self.test_mode:
             print(f"🧪 ChatEngine initialized in TEST MODE")
@@ -92,7 +116,7 @@ class ChatEngine:
             if category == 'name':
                 continue
                 
-            # Format lists (likes, interests, etc.)
+            # Format lists (likes, dislikes, etc.)
             if isinstance(value, list) and value:
                 formatted_info += f"- {category.capitalize()}: {', '.join(value)}\n"
             # Format simple key-value pairs
@@ -204,7 +228,30 @@ class ChatEngine:
     
     def handle_user_commands(self, user_input):
         """Handle special user commands"""
-        if user_input.startswith('/name '):
+        # Voice toggle command
+        if user_input.startswith('/voice'):
+            parts = user_input.split(None, 1)
+            if len(parts) > 1:
+                # Check for on/off parameter
+                param = parts[1].lower()
+                if param in ('on', 'enable', 'activate'):
+                    enabled = True
+                elif param in ('off', 'disable', 'deactivate'):
+                    enabled = False
+                else:
+                    return "Usage: /voice on|off - Enable or disable voice recognition"
+            else:
+                # Toggle current state
+                enabled = None
+                
+            # Toggle voice manager if available
+            if self.voice_manager:
+                enabled = self.voice_manager.toggle_voice(enabled)
+                return f"Voice recognition {'enabled' if enabled else 'disabled'}"
+            else:
+                return "Voice recognition is not available"
+        
+        elif user_input.startswith('/name '):
             # Command to change username
             new_name = user_input[6:].strip()
             if new_name:
@@ -247,6 +294,7 @@ class ChatEngine:
             # Show available commands
             help_text = """
 Available commands:
+/voice on|off - Enable or disable voice recognition
 /name [new name] - Change your name
 /memory - Show what I remember about you
 /calendar [subcommand] - Manage your calendar (try '/calendar help' for details)
@@ -267,6 +315,10 @@ Available commands:
     def __del__(self):
         """Clean up when the object is destroyed"""
         try:
+            # Clean up voice manager
+            if hasattr(self, 'voice_manager') and self.voice_manager:
+                self.voice_manager.stop()
+            
             # Shut down calendar notifications if enabled
             from utils.calendar import shutdown_calendar_daemon
             shutdown_calendar_daemon()
@@ -485,6 +537,19 @@ Available commands:
                 self.ui.set_status("TEST MODE - Ready")
             else:
                 self.ui.set_status("Ready")
+        
+        # Start voice manager if available
+        if self.voice_manager and not self.test_mode:
+            # Setup UI feedback
+            if hasattr(self.ui, 'setup_voice_indicator'):
+                self.ui.setup_voice_indicator(
+                    lambda: self.voice_manager.toggle_voice()
+                )
+                # Set UI callback for state updates
+                self.voice_manager.set_ui_callback(self.ui.update_voice_state)
+            
+            # Start the voice manager
+            self.voice_manager.start()
         
         # Main chat loop
         while True:

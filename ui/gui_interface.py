@@ -35,6 +35,9 @@ class GUIInterface:
         self.restart_callback = None
         self.knowledge_callback = None
         
+        # Voice indicator reference
+        self.voice_indicator = None
+        
         # Initialize tracking for pending operations
         self._pending_after_ids = []
         
@@ -270,6 +273,59 @@ class GUIInterface:
         
         # Start GUI event loop
         self.root.mainloop()
+        
+    def setup_voice_indicator(self, toggle_callback=None):
+        """Set up the voice indicator in the GUI"""
+        if not hasattr(self, 'root') or not self.root:
+            return
+            
+        try:
+            # Import the voice indicator
+            from ui.voice_indicator import VoiceIndicator
+            
+            # Create indicator in status area
+            status_frame = None
+            
+            # Find the status label's parent frame
+            if hasattr(self, 'status_label') and self.status_label:
+                status_frame = self.status_label.master
+            
+            # If we can't find the status label's parent, create a new frame
+            if not status_frame:
+                status_frame = tk.Frame(self.root, bg="black")
+                status_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=5)
+                
+            # Create the voice indicator
+            self.voice_indicator = VoiceIndicator(status_frame, callback=toggle_callback)
+            
+            # Position it next to the status label or at the right side
+            self.voice_indicator.pack(side=tk.RIGHT, padx=10)
+            
+            # Set initial state
+            self.update_voice_state(None)
+            
+        except Exception as e:
+            print(f"Error setting up voice indicator: {e}")
+            
+    def update_voice_state(self, state):
+        """Update the voice indicator state"""
+        if not hasattr(self, 'voice_indicator') or not self.voice_indicator:
+            return
+            
+        try:
+            # Schedule update on main thread
+            self._schedule_safe_update(lambda: self.voice_indicator.update_state(state))
+        except Exception as e:
+            print(f"Error updating voice state: {e}")
+            
+    def _import_voice_indicator(self):
+        """Import voice indicator module (for testing)"""
+        try:
+            from ui.voice_indicator import VoiceIndicator
+            return True
+        except ImportError:
+            print("Voice indicator module not available")
+            return False
     
     def create_knowledge_view(self):
         """Create the knowledge view with a scrollable canvas"""

@@ -53,6 +53,11 @@ def load_config():
         "ui": {
             "jupiter_color": "yellow",
             "user_color": "magenta"
+        },
+        "voice": {
+            "enabled": True,
+            "wake_word_model": "utils/io/models/jupiter-wake-word.pth",
+            "stt_model_size": "tiny"
         }
     }
 
