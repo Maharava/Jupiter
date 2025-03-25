@@ -63,6 +63,28 @@ class ChatEngine:
         
         if self.test_mode:
             print(f"🧪 ChatEngine initialized in TEST MODE")
+            
+        # Initialize voice manager
+        try:
+            # Get wake word model path from config if available
+            wake_word_model = config.get('voice', {}).get('wake_word_model', None)
+            
+            # If we have a relative path, make it absolute
+            if wake_word_model and not os.path.isabs(wake_word_model):
+                wake_word_model = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), wake_word_model)
+                
+            # Enable voice by default unless disabled in config
+            voice_enabled = config.get('voice', {}).get('enabled', True)
+            
+            self.voice_manager = VoiceManager(
+                chat_engine=self,
+                ui=ui,
+                model_path=wake_word_model,
+                enabled=voice_enabled and not test_mode  # Disable in test mode
+            )
+        except Exception as e:
+            print(f"Failed to initialize voice manager: {e}")
+            self.voice_manager = None
     
     def add_to_conversation_history(self, message):
         """Add a message to conversation history with size management"""

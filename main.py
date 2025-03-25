@@ -56,7 +56,7 @@ def load_config():
         },
         "voice": {
             "enabled": True,
-            "wake_word_model": "utils/io/models/jupiter-wake-word.pth",
+            "wake_word_model": "utils/io/jupiter-wake-word.pth",
             "stt_model_size": "tiny"
         }
     }

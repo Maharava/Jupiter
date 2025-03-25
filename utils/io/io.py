@@ -395,7 +395,7 @@ class WakeWordDetector:
     provide a complete wake word detection solution.
     """
     
-    def __init__(self, model_path=None, threshold=0.85, device_index=None, sample_rate=16000):
+    def __init__(self, model_path='jupiter-wake-word.pth', threshold=0.85, device_index=None, sample_rate=16000):
         """
         Initialize the wake word detector.
         
