@@ -1,6 +1,8 @@
 import threading
 import queue
 import logging
+import time
+import gc
 
 # Set up logging
 logger = logging.getLogger("jupiter.gui.message_processor")
@@ -42,7 +44,7 @@ class MessageProcessor(threading.Thread):
         
         while self.running:
             try:
-                # Get message from queue with timeout
+                # Get message from queue with timeout to allow checking running flag
                 try:
                     message = self.message_queue.get(timeout=0.1)
                 except queue.Empty:
@@ -77,34 +79,91 @@ class MessageProcessor(threading.Thread):
                     self._schedule_safe_update(
                         lambda: self.chat_view.remove_status_bubble()
                     )
+                elif message["type"] == "create_knowledge":
+                    self._schedule_safe_update(
+                        lambda m=message["data"]: self.knowledge_view.create_knowledge_bubbles(m)
+                    )
                 
                 # Mark as done
                 self.message_queue.task_done()
+                
+                # Small sleep to prevent CPU hogging
+                time.sleep(0.01)
+                
             except Exception as e:
-                logger.error(f"Error processing message: {e}")
+                logger.error(f"Error processing message: {e}", exc_info=True)
         
         logger.info("Message processor stopped")
     
     def stop(self):
-        """Stop the message processor"""
+        """Stop the message processor with proper cleanup"""
+        logger.info("Message processor stopping...")
         self.running = False
         
         # Clean up pending operations
         self._cleanup_pending_operations()
+        
+        # Wait a bit for thread to finish processing
+        count = 0
+        while self.is_alive() and count < 10:
+            time.sleep(0.1)
+            count += 1
+            
+        logger.info("Message processor stopped")
     
     def _schedule_safe_update(self, update_func):
-        """Schedule a UI update to run safely on the main thread"""
-        if self.root and self.root.winfo_exists():
-            after_id = self.root.after(0, update_func)
+        """Schedule a UI update to run safely on the main thread with error handling"""
+        try:
+            # Check if root window still exists
+            if not self.root or not self.root.winfo_exists():
+                logger.debug("Cannot schedule update - root window no longer exists")
+                return
+                
+            # Tkinter's after() method is thread-safe and queues the call
+            after_id = self.root.after(0, self._execute_safe_update, update_func)
+            
             # Keep track of scheduled task IDs
             self._pending_after_ids.append(after_id)
+            
+        except Exception as e:
+            logger.error(f"Error scheduling UI update: {e}")
+    
+    def _execute_safe_update(self, update_func):
+        """Execute a UI update function with proper error handling"""
+        try:
+            # Try to execute the update function
+            update_func()
+            
+        except Exception as e:
+            logger.error(f"Error executing UI update: {e}")
+            
+        finally:
+            # Remove this task ID from tracking list
+            for after_id in list(self._pending_after_ids):
+                try:
+                    if after_id in self._pending_after_ids:
+                        self._pending_after_ids.remove(after_id)
+                except Exception:
+                    pass
     
     def _cleanup_pending_operations(self):
         """Clean up any pending operations to prevent memory leaks"""
-        if self.root and self.root.winfo_exists():
-            for after_id in self._pending_after_ids:
-                try:
-                    self.root.after_cancel(after_id)
-                except Exception:
-                    pass
+        try:
+            # Cancel any pending after() calls
+            if self.root and self.root.winfo_exists():
+                for after_id in list(self._pending_after_ids):
+                    try:
+                        self.root.after_cancel(after_id)
+                    except Exception:
+                        pass
+            
+            # Clear the list even if root is gone
+            self._pending_after_ids.clear()
+            
+            # Force garbage collection
+            gc.collect()
+            
+        except Exception as e:
+            logger.error(f"Error cleaning up message processor: {e}")
+            # Make sure list is cleared even on error
             self._pending_after_ids.clear()

@@ -3,7 +3,7 @@ Adapter layer for the wake word detector models.
 """
 
 # Import from the actual io-wake-word package
-import io-wake-word as iww  # Replace with actual package import 
+import io_wake_word as iww  # Replace with actual package import 
 
 class WakeWordDetector:
     """Detects wake words in audio stream"""

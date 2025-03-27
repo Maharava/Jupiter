@@ -11,7 +11,10 @@ class UserDataManager:
         
         # Create empty user data file if it doesn't exist
         if not os.path.exists(user_data_file):
-            os.makedirs(os.path.dirname(user_data_file), exist_ok=True)
+            # Only try to create directory if there's a directory component
+            dir_name = os.path.dirname(user_data_file)
+            if dir_name:
+                os.makedirs(dir_name, exist_ok=True)
             with open(user_data_file, 'w', encoding='utf-8') as f:
                 json.dump({}, f)
     

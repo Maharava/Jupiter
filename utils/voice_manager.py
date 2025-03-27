@@ -5,8 +5,8 @@ import logging
 from enum import Enum, auto
 import os
 
-from io-wake-word.audio import AudioCapture
-from io-wake-word.models import WakeWordDetector
+from io_wake_word.audio import AudioCapture
+from io_wake_word.models import WakeWordDetector
 from utils.whisper_stt import listen_and_transcribe
 from utils.piper import llm_speak
 from utils.path_helper import resolve_path

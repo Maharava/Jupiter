@@ -3,7 +3,7 @@ Adapter layer between Jupiter's AudioCapture and the wake word detector.
 """
 
 # Import from the actual io-wake-word package
-import io-wake-word as iww  # Replace with actual package import
+import io_wake_word as iww  # Replace with actual package import
 
 class AudioCapture:
     """Captures audio from microphone"""

@@ -1,6 +1,10 @@
 import tkinter as tk
 from tkinter import scrolledtext
+import logging
 from ui.utils.ui_helpers import get_color
+
+# Set up logging
+logger = logging.getLogger("jupiter.gui.chat_view")
 
 class ChatView:
     """Chat view component for Jupiter GUI"""
@@ -38,58 +42,69 @@ class ChatView:
         self.chat_text.pack(fill=tk.BOTH, expand=True)
         self.chat_text.config(state=tk.DISABLED)  # Make read-only
         
+        # Reference to current status bubble for removal
+        self.status_bubble_start = None
+        self.status_bubble_end = None
+        
         # Configure text tags for different message types
         self._setup_tags()
     
     def _setup_tags(self):
         """Set up text tags for message styling"""
-        self.chat_text.tag_configure(
-            "jupiter_prefix", 
-            foreground=get_color(self.jupiter_color)
-        )
-        self.chat_text.tag_configure(
-            "jupiter_bubble", 
-            background=get_color(self.jupiter_color, 0.7), 
-            foreground="black", 
-            relief=tk.SOLID, 
-            borderwidth=1, 
-            lmargin1=10, 
-            lmargin2=10, 
-            rmargin=10, 
-            spacing1=3, 
-            spacing3=3
-        )
-        
-        self.chat_text.tag_configure(
-            "user_prefix", 
-            foreground=get_color(self.user_color)
-        )
-        self.chat_text.tag_configure(
-            "user_bubble", 
-            background=get_color(self.user_color, 0.7), 
-            foreground="white", 
-            relief=tk.SOLID, 
-            borderwidth=1, 
-            lmargin1=10, 
-            lmargin2=10, 
-            rmargin=10, 
-            spacing1=3, 
-            spacing3=3
-        )
-        
-        # Status bubble tag
-        self.chat_text.tag_configure(
-            "status_bubble", 
-            background="#333333",
-            foreground="#FFFFFF",
-            relief=tk.SOLID, 
-            borderwidth=1,
-            lmargin1=10, 
-            lmargin2=10,
-            rmargin=10,
-            spacing1=3,
-            spacing3=3
-        )
+        try:
+            if not hasattr(self, 'chat_text') or not self.chat_text:
+                logger.error("Cannot set up tags - chat_text not initialized")
+                return
+                
+            self.chat_text.tag_configure(
+                "jupiter_prefix", 
+                foreground=get_color(self.jupiter_color)
+            )
+            self.chat_text.tag_configure(
+                "jupiter_bubble", 
+                background=get_color(self.jupiter_color, 0.7), 
+                foreground="black", 
+                relief=tk.SOLID, 
+                borderwidth=1, 
+                lmargin1=10, 
+                lmargin2=10, 
+                rmargin=10, 
+                spacing1=3, 
+                spacing3=3
+            )
+            
+            self.chat_text.tag_configure(
+                "user_prefix", 
+                foreground=get_color(self.user_color)
+            )
+            self.chat_text.tag_configure(
+                "user_bubble", 
+                background=get_color(self.user_color, 0.7), 
+                foreground="white", 
+                relief=tk.SOLID, 
+                borderwidth=1, 
+                lmargin1=10, 
+                lmargin2=10, 
+                rmargin=10, 
+                spacing1=3, 
+                spacing3=3
+            )
+            
+            # Status bubble tag
+            self.chat_text.tag_configure(
+                "status_bubble", 
+                background="#333333",
+                foreground="#FFFFFF",
+                relief=tk.SOLID, 
+                borderwidth=1,
+                lmargin1=10, 
+                lmargin2=10,
+                rmargin=10,
+                spacing1=3,
+                spacing3=3
+            )
+        except Exception as e:
+            logger.error(f"Error setting up chat tags: {e}")
     
     def display_jupiter_message(self, message):
         """
@@ -99,29 +114,34 @@ class ChatView:
             message: Text message to display
         """
         try:
+            # Check if widget still exists
+            if not hasattr(self, 'chat_text') or not self.chat_text or not self.chat_text.winfo_exists():
+                logger.warning("Cannot display Jupiter message - widget no longer exists")
+                return
+                
             # Enable editing
-            if self.chat_text and self.chat_text.winfo_exists():
-                self.chat_text.config(state=tk.NORMAL)
-                
-                # Add prefix
-                self.chat_text.insert(tk.END, "Jupiter: ", "jupiter_prefix")
-                self.chat_text.insert(tk.END, "\n")
-                
-                # Add message in bubble
-                bubble_start = self.chat_text.index(tk.INSERT)
-                self.chat_text.insert(tk.END, f"{message}\n\n")
-                bubble_end = self.chat_text.index(tk.INSERT)
-                
-                # Apply bubble tag
-                self.chat_text.tag_add("jupiter_bubble", bubble_start, bubble_end)
-                
-                # Scroll to bottom
-                self.chat_text.see(tk.END)
-                
-                # Disable editing
-                self.chat_text.config(state=tk.DISABLED)
+            self.chat_text.config(state=tk.NORMAL)
+            
+            # Add prefix
+            self.chat_text.insert(tk.END, "Jupiter: ", "jupiter_prefix")
+            self.chat_text.insert(tk.END, "\n")
+            
+            # Add message in bubble
+            bubble_start = self.chat_text.index(tk.INSERT)
+            self.chat_text.insert(tk.END, f"{message}\n\n")
+            bubble_end = self.chat_text.index(tk.INSERT)
+            
+            # Apply bubble tag
+            self.chat_text.tag_add("jupiter_bubble", bubble_start, bubble_end)
+            
+            # Scroll to bottom
+            self.chat_text.see(tk.END)
+            
+            # Disable editing
+            self.chat_text.config(state=tk.DISABLED)
+            
         except Exception as e:
-            print(f"Error displaying Jupiter message: {e}")
+            logger.error(f"Error displaying Jupiter message: {e}")
     
     def display_user_message(self, message):
         """
@@ -131,29 +151,35 @@ class ChatView:
             message: Text message to display
         """
         try:
+            # Check if widget still exists
+            if not hasattr(self, 'chat_text') or not self.chat_text or not self.chat_text.winfo_exists():
+                logger.warning("Cannot display user message - widget no longer exists")
+                return
+                
             # Enable editing
-            if self.chat_text and self.chat_text.winfo_exists():
-                self.chat_text.config(state=tk.NORMAL)
-                
-                # Add prefix
-                self.chat_text.insert(tk.END, f"{self.user_prefix}: ", "user_prefix")
-                self.chat_text.insert(tk.END, "\n")
-                
-                # Add message in bubble
-                bubble_start = self.chat_text.index(tk.INSERT)
-                self.chat_text.insert(tk.END, f"{message}\n\n")
-                bubble_end = self.chat_text.index(tk.INSERT)
-                
-                # Apply bubble tag
-                self.chat_text.tag_add("user_bubble", bubble_start, bubble_end)
-                
-                # Scroll to bottom
-                self.chat_text.see(tk.END)
-                
-                # Disable editing
-                self.chat_text.config(state=tk.DISABLED)
+            self.chat_text.config(state=tk.NORMAL)
+            
+            # Add prefix
+            self.chat_text.insert(tk.END, f"{self.user_prefix}: ", "user_prefix")
+            self.chat_text.insert(tk.END, "\n")
+            
+            # Add message in bubble - this now uses the actual message directly from the input
+            # Not relying on the entry widget's current content
+            bubble_start = self.chat_text.index(tk.INSERT)
+            self.chat_text.insert(tk.END, f"{message}\n\n")
+            bubble_end = self.chat_text.index(tk.INSERT)
+            
+            # Apply bubble tag
+            self.chat_text.tag_add("user_bubble", bubble_start, bubble_end)
+            
+            # Scroll to bottom
+            self.chat_text.see(tk.END)
+            
+            # Disable editing
+            self.chat_text.config(state=tk.DISABLED)
+            
         except Exception as e:
-            print(f"Error displaying user message: {e}")
+            logger.error(f"Error displaying user message: {e}")
     
     def display_status_bubble(self, text):
         """
@@ -163,44 +189,71 @@ class ChatView:
             text: Status message to display
         """
         try:
-            if self.chat_text and self.chat_text.winfo_exists():
-                self.chat_text.config(state=tk.NORMAL)
+            # Check if widget still exists
+            if not hasattr(self, 'chat_text') or not self.chat_text or not self.chat_text.winfo_exists():
+                logger.warning("Cannot display status bubble - widget no longer exists")
+                return
                 
-                # Add some spacing before the bubble
-                self.chat_text.insert(tk.END, "\n")
-                
-                # Store location for removal
-                self.status_bubble_start = self.chat_text.index(tk.INSERT)
-                
-                # Add the status message with a special tag
-                self.chat_text.insert(tk.END, f"🎤 {text}\n\n")
-                self.status_bubble_end = self.chat_text.index(tk.INSERT)
-                
-                # Apply the tag
-                self.chat_text.tag_add("status_bubble", self.status_bubble_start, self.status_bubble_end)
-                
-                # Scroll to bottom
-                self.chat_text.see(tk.END)
-                
-                # Disable editing
-                self.chat_text.config(state=tk.DISABLED)
+            # Remove existing status bubble if any
+            self.remove_status_bubble()
+            
+            # Enable editing
+            self.chat_text.config(state=tk.NORMAL)
+            
+            # Add some spacing before the bubble
+            self.chat_text.insert(tk.END, "\n")
+            
+            # Store location for removal
+            self.status_bubble_start = self.chat_text.index(tk.INSERT)
+            
+            # Add the status message with a special tag
+            self.chat_text.insert(tk.END, f"🎤 {text}\n\n")
+            self.status_bubble_end = self.chat_text.index(tk.INSERT)
+            
+            # Apply the tag
+            self.chat_text.tag_add("status_bubble", self.status_bubble_start, self.status_bubble_end)
+            
+            # Scroll to bottom
+            self.chat_text.see(tk.END)
+            
+            # Disable editing
+            self.chat_text.config(state=tk.DISABLED)
+            
         except Exception as e:
-            print(f"Error displaying status bubble: {e}")
+            logger.error(f"Error displaying status bubble: {e}")
     
     def remove_status_bubble(self):
-        """Remove the status bubble from the chat area"""
+        """Remove the status bubble from the chat area with proper error handling"""
         try:
-            if hasattr(self, 'status_bubble_start') and hasattr(self, 'status_bubble_end'):
-                if self.chat_text and self.chat_text.winfo_exists():
-                    self.chat_text.config(state=tk.NORMAL)
-                    
-                    # Remove the status message
-                    self.chat_text.delete(self.status_bubble_start, self.status_bubble_end)
-                    
-                    # Disable editing
-                    self.chat_text.config(state=tk.DISABLED)
+            # Check if widget still exists and we have bubble positions
+            if not hasattr(self, 'chat_text') or not self.chat_text or not self.chat_text.winfo_exists():
+                logger.debug("Cannot remove status bubble - widget no longer exists")
+                return
+                
+            if not hasattr(self, 'status_bubble_start') or not hasattr(self, 'status_bubble_end'):
+                return
+                
+            if self.status_bubble_start is None or self.status_bubble_end is None:
+                return
+                
+            # Enable editing
+            self.chat_text.config(state=tk.NORMAL)
+            
+            # Remove the status message
+            self.chat_text.delete(self.status_bubble_start, self.status_bubble_end)
+            
+            # Reset bubble references
+            self.status_bubble_start = None
+            self.status_bubble_end = None
+            
+            # Disable editing
+            self.chat_text.config(state=tk.DISABLED)
+            
         except Exception as e:
-            print(f"Error removing status bubble: {e}")
+            logger.error(f"Error removing status bubble: {e}")
+            # Reset bubble references even on error
+            self.status_bubble_start = None
+            self.status_bubble_end = None
     
     def update_user_prefix(self, prefix):
         """
@@ -209,31 +262,53 @@ class ChatView:
         Args:
             prefix: New user prefix
         """
-        self.user_prefix = prefix
+        if prefix:
+            self.user_prefix = prefix
     
     def clear(self):
-        """Clear the chat display"""
+        """Clear the chat display with proper error handling"""
         try:
+            # Check if widget still exists
+            if not hasattr(self, 'chat_text') or not self.chat_text or not self.chat_text.winfo_exists():
+                logger.warning("Cannot clear chat - widget no longer exists")
+                return
+                
             # Enable editing
-            if self.chat_text and self.chat_text.winfo_exists():
-                self.chat_text.config(state=tk.NORMAL)
-                
-                # Clear all text
-                self.chat_text.delete(1.0, tk.END)
-                
-                # Disable editing
-                self.chat_text.config(state=tk.DISABLED)
+            self.chat_text.config(state=tk.NORMAL)
+            
+            # Clear all text
+            self.chat_text.delete(1.0, tk.END)
+            
+            # Reset bubble references
+            self.status_bubble_start = None
+            self.status_bubble_end = None
+            
+            # Disable editing
+            self.chat_text.config(state=tk.DISABLED)
+            
         except Exception as e:
-            print(f"Error clearing chat: {e}")
+            logger.error(f"Error clearing chat: {e}")
     
     def pack(self, **kwargs):
-        """Pack the chat view into its parent"""
-        self.frame.pack(**kwargs)
+        """Pack the chat view into its parent with error handling"""
+        try:
+            if hasattr(self, 'frame') and self.frame and self.frame.winfo_exists():
+                self.frame.pack(**kwargs)
+        except Exception as e:
+            logger.error(f"Error packing chat view: {e}")
     
     def grid(self, **kwargs):
-        """Grid the chat view into its parent"""
-        self.frame.grid(**kwargs)
+        """Grid the chat view into its parent with error handling"""
+        try:
+            if hasattr(self, 'frame') and self.frame and self.frame.winfo_exists():
+                self.frame.grid(**kwargs)
+        except Exception as e:
+            logger.error(f"Error gridding chat view: {e}")
     
     def pack_forget(self):
-        """Remove the chat view from the parent's layout"""
-        self.frame.pack_forget()
+        """Remove the chat view from the parent's layout with error handling"""
+        try:
+            if hasattr(self, 'frame') and self.frame and self.frame.winfo_exists():
+                self.frame.pack_forget()
+        except Exception as e:
+            logger.error(f"Error hiding chat view: {e}")
