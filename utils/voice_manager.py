@@ -5,45 +5,40 @@ import logging
 from enum import Enum, auto
 import os
 
-from io_wake_word.audio import AudioCapture, FeatureExtractor
-from io_wake_word.models import WakeWordDetector
-
+from utils.io.io import AudioCapture, WakeWordDetector
 from utils.whisper_stt import listen_and_transcribe
 from utils.piper import llm_speak
+from utils.path_helper import resolve_path
 
 # Set up logging
 logger = logging.getLogger("jupiter.voice")
 
 class VoiceState(Enum):
     """States for the voice interaction state machine"""
-    INACTIVE = auto()  # Voice features are disabled
+    INACTIVE = auto()  # Voice features disabled
     LISTENING = auto()  # Wake word detection active
     FOCUSING = auto()   # STT active, waiting for speech
     PROCESSING = auto() # Processing captured speech
     SPEAKING = auto()   # Jupiter is speaking
 
 class VoiceManager:
-    """
-    Manages voice interaction for Jupiter, coordinating wake word detection 
-    and speech-to-text processing.
-    """
+    """Manages voice interaction for Jupiter"""
     
     def __init__(self, chat_engine, ui, model_path=None, enabled=True):
-        """
-        Initialize the voice manager.
-        
-        Args:
-            chat_engine: Jupiter's chat engine for processing transcribed text
-            ui: The UI object (terminal or GUI) for feedback
-            model_path: Path to the wake word model
-            enabled: Whether voice features are enabled by default
-        """
+        """Initialize voice manager"""
         self.chat_engine = chat_engine
         self.ui = ui
-        self.model_path = model_path
+        self.model_path = None
         self.enabled = enabled
         
-        # Initialize state and locks
+        # Set up model path
+        if model_path:
+            self.model_path = resolve_path(model_path)
+            if not os.path.exists(self.model_path):
+                logger.error(f"Wake word model not found: {self.model_path}")
+                self.model_path = None
+        
+        # Initialize state
         self.state = VoiceState.INACTIVE
         self.state_lock = threading.Lock()
         self.running = False
@@ -52,29 +47,20 @@ class VoiceManager:
         self.speech_detected = False
         self.last_speech_time = 0
         
-        # Initialize Io components
+        # Initialize components
         self.wake_word_detector = None
         self.audio_capture = None
-        self.feature_extractor = None
         
-        if model_path:
+        if self.model_path:
             try:
-                # Check if model file exists
-                if not os.path.exists(model_path):
-                    logger.error(f"Wake word model not found: {model_path}")
-                else:
-                    self.wake_word_detector = WakeWordDetector(model_path=model_path)
-                    logger.info(f"Wake word detector initialized with model: {model_path}")
+                self.wake_word_detector = WakeWordDetector(model_path=self.model_path)
+                logger.info(f"Wake word detector initialized with model: {self.model_path}")
             except Exception as e:
                 logger.error(f"Failed to initialize wake word detector: {e}")
         
-        # Initialize control thread
+        # Initialize control thread and queues
         self.control_thread = None
-        
-        # Command queue for thread-safe operations
         self.command_queue = queue.Queue()
-        
-        # UI update callback
         self.update_ui_callback = None
         
     def set_ui_callback(self, callback):
@@ -83,11 +69,7 @@ class VoiceManager:
         
     def start(self):
         """Start the voice manager"""
-        if self.running:
-            return
-            
-        if not self.wake_word_detector:
-            logger.error("Cannot start voice manager: wake word detector not initialized")
+        if self.running or not self.wake_word_detector:
             return
             
         self.running = True
@@ -109,7 +91,7 @@ class VoiceManager:
         logger.info("Voice manager started")
         
     def stop(self):
-        """Stop the voice manager"""
+        """Stop the voice manager and clean up resources"""
         if not self.running:
             return
             
@@ -121,6 +103,18 @@ class VoiceManager:
             
         # Stop audio components
         self._stop_audio_components()
+        
+        # Clean up resources
+        if self.audio_capture:
+            try:
+                self.audio_capture.stop()
+            except Exception as e:
+                logger.error(f"Error stopping audio capture: {e}")
+            finally:
+                self.audio_capture = None
+                
+        if hasattr(self, 'feature_extractor') and self.feature_extractor:
+            self.feature_extractor = None
             
         # Set state to inactive
         self._transition_to(VoiceState.INACTIVE)
@@ -135,12 +129,10 @@ class VoiceManager:
                           or self._get_state() == VoiceState.FOCUSING)
                           
         if enabled:
-            # Queue command to enable
             self.command_queue.put(("enable", None))
             if hasattr(self.ui, 'set_status'):
                 self.ui.set_status("Activating voice...", True)
         else:
-            # Queue command to disable
             self.command_queue.put(("disable", None))
             if hasattr(self.ui, 'set_status'):
                 self.ui.set_status("Deactivating voice...", True)
@@ -153,7 +145,7 @@ class VoiceManager:
             return False
             
         try:
-            # Mark that we detected speech in this session
+            # Mark that we detected speech
             self.speech_detected = True
             self.last_speech_time = time.time()
             
@@ -163,7 +155,7 @@ class VoiceManager:
             # Switch to processing state
             self._transition_to(VoiceState.PROCESSING)
             
-            # Queue speech for processing by the chat engine
+            # Queue speech for processing
             self.command_queue.put(("process_speech", text))
             
             return True
@@ -174,8 +166,6 @@ class VoiceManager:
     def _handle_wake_word_detected(self, confidence):
         """Handle wake word detection callback"""
         logger.info(f"Wake word detected with confidence: {confidence:.4f}")
-        
-        # Queue command to start focusing
         self.command_queue.put(("focus", None))
         
     def _control_loop(self):
@@ -199,11 +189,10 @@ class VoiceManager:
                     if not hasattr(self, '_listening_active') or not self._listening_active:
                         self._setup_listening()
                     
-                    # Process audio frame if we have active components
+                    # Process audio frame
                     if hasattr(self, '_listening_active') and self._listening_active:
                         self._process_audio_frame()
                     
-                    # Sleep a tiny bit to avoid CPU spinning
                     time.sleep(0.01)
                     
                 elif current_state == VoiceState.FOCUSING:
@@ -211,30 +200,25 @@ class VoiceManager:
                     if hasattr(self, '_listening_active') and self._listening_active:
                         self._stop_audio_components()
                         
-                    # Run STT in this thread
+                    # Run STT
                     self._run_stt()
                     
-                    # After STT completes, check if we detected speech
+                    # Check if we detected speech
                     if not self.speech_detected:
                         # No speech detected, return to listening
-                        logger.info("No speech detected in focus session, returning to listening")
+                        logger.info("No speech detected, returning to listening")
                         self._transition_to(VoiceState.LISTENING)
                     else:
                         # Reset for next focus session
                         self.speech_detected = False
                         
-                elif current_state == VoiceState.PROCESSING:
-                    # In processing state, just wait for commands
-                    time.sleep(0.1)
-                    
-                elif current_state == VoiceState.SPEAKING:
-                    # In speaking state, check if done speaking
-                    # For now, we'll just wait for the command to transition
+                elif current_state in (VoiceState.PROCESSING, VoiceState.SPEAKING):
+                    # Just wait for commands
                     time.sleep(0.1)
                 
             except Exception as e:
                 logger.error(f"Error in voice manager control loop: {e}")
-                time.sleep(0.5)  # Sleep longer on error
+                time.sleep(0.5)
                 
         logger.info("Voice manager control thread exited")
     
@@ -244,14 +228,11 @@ class VoiceManager:
             if not self.audio_capture:
                 self.audio_capture = AudioCapture()
                 
-            if not self.feature_extractor:
-                self.feature_extractor = FeatureExtractor()
-                
             # Register wake word detection callback
             if self.wake_word_detector:
-                self.wake_word_detector.register_callback(self._handle_wake_word_detected)
+                self.wake_word_detector.register_detection_callback(self._handle_wake_word_detected)
                 
-            # Start audio capture if not already running
+            # Start audio capture
             if not hasattr(self.audio_capture, 'is_running') or not self.audio_capture.is_running:
                 self.audio_capture.start()
                 
@@ -269,19 +250,16 @@ class VoiceManager:
     def _process_audio_frame(self):
         """Process a single audio frame for wake word detection"""
         try:
-            if not self.audio_capture or not self.feature_extractor or not self.wake_word_detector:
+            if not self.audio_capture or not self.wake_word_detector:
                 return
                 
             # Get audio frame from capture
-            audio_frame = self.audio_capture.get_buffer()
+            audio_buffer = self.audio_capture.get_buffer()
             
-            # Extract features
-            features = self.feature_extractor.extract(audio_frame)
-            
-            # Detect wake word if we have features
-            if features is not None:
-                # The detection callback will be triggered if wake word is detected
-                self.wake_word_detector.detect(features)
+            if len(audio_buffer) > 0:
+                # Check if we need to start the detector
+                if not self.wake_word_detector.is_running:
+                    self.wake_word_detector.start()
                 
         except Exception as e:
             logger.error(f"Error processing audio frame: {e}")
@@ -292,6 +270,10 @@ class VoiceManager:
             # Stop audio capture
             if self.audio_capture:
                 self.audio_capture.stop()
+                
+            # Stop wake word detector
+            if self.wake_word_detector and self.wake_word_detector.is_running:
+                self.wake_word_detector.stop()
                 
             # Mark listening as inactive
             self._listening_active = False
@@ -315,7 +297,6 @@ class VoiceManager:
                 logger.info("Voice features enabled")
                 
             elif command == "disable":
-                # Stop wake word detection if running
                 if hasattr(self, '_listening_active') and self._listening_active:
                     self._stop_audio_components()
                     
@@ -328,12 +309,7 @@ class VoiceManager:
                 
             elif command == "process_speech":
                 # Process the transcribed speech
-                text = data
-                
-                # Forward the transcribed text to the chat engine
-                # We'll set a timer to transition back to focusing after
-                # This will happen in the callback from the chat engine
-                self._send_to_chat_engine(text)
+                self._send_to_chat_engine(data)
                 
             elif command == "done_speaking":
                 # Transition back to focusing
@@ -351,45 +327,52 @@ class VoiceManager:
     def _run_stt(self):
         """Run STT and handle the result"""
         try:
-            # Reset speech detection flag for this session
+            # Reset speech detection flag
             self.speech_detected = False
             self.last_speech_time = 0
             
             # Update UI
             self._update_ui()
             
+            # Add a "Listening..." indicator to the chat
+            if hasattr(self.ui, 'output_queue'):
+                self.ui.output_queue.put({"type": "status_bubble", "text": "Listening..."})
+            
             # Run the speech-to-text
             logger.info("Starting speech capture with whisper")
             
-            # Set silence threshold and duration
             transcription = listen_and_transcribe(
-                silence_threshold=500,  # Adjust based on environment
-                silence_duration=2.0,   # 2 seconds of silence to end capture
-                model_size="tiny"       # Use tiny model for speed
+                silence_threshold=500,
+                silence_duration=2.0,
+                model_size="tiny"
             )
+            
+            # Remove the listening indicator
+            if hasattr(self.ui, 'output_queue'):
+                self.ui.output_queue.put({"type": "remove_status_bubble"})
             
             # Process the transcription if valid
             if transcription and transcription.strip():
-                # Process the speech
                 self.process_speech(transcription)
             else:
                 logger.info("No speech detected or empty transcription")
-                # No speech detected, will return to listening mode
-                pass
                 
         except Exception as e:
             logger.error(f"Error in STT processing: {e}")
             
         finally:
+            # Remove the status bubble if we exit unexpectedly
+            if hasattr(self.ui, 'output_queue'):
+                self.ui.output_queue.put({"type": "remove_status_bubble"})
+                
             # If we're still in focusing state, go back to listening
-            # This can happen if there's an error during STT
             current_state = self._get_state()
             if current_state == VoiceState.FOCUSING and not self.speech_detected:
                 self._transition_to(VoiceState.LISTENING)
                 
     def _send_to_chat_engine(self, text):
         """Send transcribed text to the chat engine"""
-        # We'll use a separate thread to avoid blocking the control loop
+        # Use a separate thread
         def process_thread():
             try:
                 # Get user prefix from chat engine
