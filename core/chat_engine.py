@@ -2,7 +2,9 @@ import os
 import json
 import datetime
 import threading
+import re
 
+from user_id_commands import handle_id_commands
 from utils.intent_recog import load_model, get_intent
 from utils.voice_cmd import intent_functions
 from utils.text_processing import count_tokens, truncate_to_token_limit
@@ -97,6 +99,15 @@ class ChatEngine:
         except Exception as e:
             print(f"Failed to initialize voice manager: {e}")
             self.voice_manager = None
+    
+    def _speak_response(self, text):
+        """Helper to speak responses if available"""
+        try:
+            from utils.piper import llm_speak
+            llm_speak(text)
+        except ImportError:
+            # TTS not available
+            pass
     
     def add_to_conversation_history(self, message):
         """Add a message to conversation history with size management"""
@@ -260,8 +271,13 @@ class ChatEngine:
         
         return memory_display
     
-    def handle_user_commands(self, user_input):
-        """Handle special user commands"""
+    def update_handle_user_commands(self, user_input):
+        """Updated handle_user_commands method for ChatEngine"""
+        # Add platform tracking for the ChatEngine
+        self.current_platform = "gui"
+        if hasattr(self.ui, 'is_terminal') and self.ui.is_terminal:
+            self.current_platform = "terminal"
+        
         # Voice toggle command
         if user_input.startswith('/voice'):
             parts = user_input.split(None, 1)
@@ -293,19 +309,24 @@ class ChatEngine:
                 self.user_data_manager.current_user['name'] = new_name
                 self.user_data_manager.save_current_user()
                 response = f"I'll call you {new_name} from now on."
-                llm_speak(response)  # Speak the response
+                self._speak_response(response)
                 return response
             else:
                 response = "Please provide a name after the /name command."
-                llm_speak(response)  # Speak the response
+                self._speak_response(response)
                 return response
         
         elif user_input == '/memory':
             # Show what Jupiter remembers about the user
             response = self.format_memory_display()
-            llm_speak("Here's what I remember about you.")  # Simplified for speech
+            self._speak_response("Here's what I remember about you.")
             return response
-            
+        
+        # Handle ID-related commands
+        id_response = handle_id_commands(self, user_input)
+        if id_response:
+            return id_response
+                
         elif user_input.startswith('/calendar'):
             # Handle special calendar commands
             # Check for preferences command
@@ -317,34 +338,36 @@ class ChatEngine:
                     return "Opening calendar notification preferences..."
                 except (ImportError, AttributeError) as e:
                     return "Calendar preferences are not available in this mode."
-                
+                    
             # Handle other calendar commands
-            user_id = self.user_data_manager.current_user.get('name')
+            user_id = self.user_data_manager.current_user.get('user_id')
             response = process_calendar_command(user_id, user_input)
-            llm_speak("Here's your calendar information.")  # Simplified for speech
+            self._speak_response("Here's your calendar information.")
             return response
         
         elif user_input == '/help':
             # Show available commands
             help_text = """
-Available commands:
-/voice on|off - Enable or disable voice recognition
-/name [new name] - Change your name
-/memory - Show what I remember about you
-/calendar [subcommand] - Manage your calendar (try '/calendar help' for details)
-/calendar preferences - Configure notification settings
-/help - Show this help message
+    Available commands:
+    /voice on|off - Enable or disable voice recognition
+    /name [new name] - Change your name
+    /memory - Show what I remember about you
+    /id - Show your Jupiter ID information
+    /link [platform] [username] - Link your identity with another platform
+    /calendar [subcommand] - Manage your calendar (try '/calendar help' for details)
+    /calendar preferences - Configure notification settings
+    /help - Show this help message
             """
             
             # Add test mode info
             if self.test_mode:
                 help_text += "\n⚠️ TEST MODE is active - running without LLM backend\n"
             
-            llm_speak("Here are the available commands.")  # Simplified for speech
+            self._speak_response("Here are the available commands.")
             return help_text
         
         # Not a command, return None to continue normal processing
-        return None        
+        return None    
             
     def __del__(self):
         """Clean up when the object is destroyed"""

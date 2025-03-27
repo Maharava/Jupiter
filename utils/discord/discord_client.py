@@ -3,6 +3,7 @@ import asyncio
 import traceback
 import threading
 import queue
+from .id_commands import setup as setup_id_commands
 from .message_handler import MessageHandler
 from .user_mapper import UserMapper
 from .response_formatter import ResponseFormatter
@@ -43,6 +44,8 @@ class DiscordClient:
         
         # Set up event handlers
         self.setup_event_handlers()
+        
+        self.id_commands = setup_id_commands(self.client, self.user_mapper)
     
     def setup_event_handlers(self):
         @self.client.event

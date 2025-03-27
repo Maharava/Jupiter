@@ -20,7 +20,7 @@
     "user_color": "magenta"
   },
   "discord": {
-    "enabled": true,
+    "enabled": false,
     "token": "",
     "allowed_servers": [],
     "allowed_channels": [],
