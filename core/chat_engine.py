@@ -46,7 +46,15 @@ class ChatEngine:
             
             # If we have a relative path, make it absolute
             if wake_word_model and not os.path.isabs(wake_word_model):
-                wake_word_model = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), wake_word_model)
+                # First check if the file exists as is
+                if not os.path.exists(wake_word_model):
+                    # Then try to make it absolute
+                    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    absolute_path = os.path.join(base_dir, wake_word_model)
+                    if os.path.exists(absolute_path):
+                        wake_word_model = absolute_path
+                    else:
+                        logger.warning(f"Wake word model not found at {wake_word_model} or {absolute_path}")
                 
             # Enable voice by default unless disabled in config
             voice_enabled = config.get('voice', {}).get('enabled', True)
@@ -58,8 +66,12 @@ class ChatEngine:
                 enabled=voice_enabled and not test_mode  # Disable in test mode
             )
         except Exception as e:
+            logger.error(f"Failed to initialize voice manager: {e}")
             print(f"Failed to initialize voice manager: {e}")
             self.voice_manager = None
+
+        if self.test_mode:
+            print(f"🧪 ChatEngine initialized in TEST MODE")
         
         if self.test_mode:
             print(f"🧪 ChatEngine initialized in TEST MODE")

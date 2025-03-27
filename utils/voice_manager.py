@@ -3,7 +3,11 @@ import time
 import queue
 import logging
 from enum import Enum, auto
-from utils.io.io import WakeWordDetector
+import os
+
+from io_wake_word.audio import AudioCapture, FeatureExtractor
+from io_wake_word.models import WakeWordDetector
+
 from utils.whisper_stt import listen_and_transcribe
 from utils.piper import llm_speak
 
@@ -48,12 +52,19 @@ class VoiceManager:
         self.speech_detected = False
         self.last_speech_time = 0
         
-        # Create wake word detector
+        # Initialize Io components
         self.wake_word_detector = None
+        self.audio_capture = None
+        self.feature_extractor = None
+        
         if model_path:
             try:
-                self.wake_word_detector = WakeWordDetector(model_path=model_path)
-                logger.info(f"Wake word detector initialized with model: {model_path}")
+                # Check if model file exists
+                if not os.path.exists(model_path):
+                    logger.error(f"Wake word model not found: {model_path}")
+                else:
+                    self.wake_word_detector = WakeWordDetector(model_path=model_path)
+                    logger.info(f"Wake word detector initialized with model: {model_path}")
             except Exception as e:
                 logger.error(f"Failed to initialize wake word detector: {e}")
         
@@ -108,9 +119,8 @@ class VoiceManager:
         if self.control_thread:
             self.control_thread.join(timeout=2.0)
             
-        # Ensure wake word detector is stopped
-        if self.wake_word_detector:
-            self.wake_word_detector.stop()
+        # Stop audio components
+        self._stop_audio_components()
             
         # Set state to inactive
         self._transition_to(VoiceState.INACTIVE)
@@ -185,17 +195,21 @@ class VoiceManager:
                     time.sleep(0.1)
                     
                 elif current_state == VoiceState.LISTENING:
-                    # In listening state, ensure wake word detector is running
-                    if not hasattr(self, '_wake_word_running') or not self._wake_word_running:
-                        self._start_wake_word_detection()
-                        
-                    # Process commands and sleep
-                    time.sleep(0.1)
+                    # Ensure audio components are running
+                    if not hasattr(self, '_listening_active') or not self._listening_active:
+                        self._setup_listening()
+                    
+                    # Process audio frame if we have active components
+                    if hasattr(self, '_listening_active') and self._listening_active:
+                        self._process_audio_frame()
+                    
+                    # Sleep a tiny bit to avoid CPU spinning
+                    time.sleep(0.01)
                     
                 elif current_state == VoiceState.FOCUSING:
                     # In focusing state, run STT
-                    if hasattr(self, '_wake_word_running') and self._wake_word_running:
-                        self._stop_wake_word_detection()
+                    if hasattr(self, '_listening_active') and self._listening_active:
+                        self._stop_audio_components()
                         
                     # Run STT in this thread
                     self._run_stt()
@@ -223,7 +237,72 @@ class VoiceManager:
                 time.sleep(0.5)  # Sleep longer on error
                 
         logger.info("Voice manager control thread exited")
-        
+    
+    def _setup_listening(self):
+        """Set up components for listening mode"""
+        try:
+            if not self.audio_capture:
+                self.audio_capture = AudioCapture()
+                
+            if not self.feature_extractor:
+                self.feature_extractor = FeatureExtractor()
+                
+            # Register wake word detection callback
+            if self.wake_word_detector:
+                self.wake_word_detector.register_callback(self._handle_wake_word_detected)
+                
+            # Start audio capture if not already running
+            if not hasattr(self.audio_capture, 'is_running') or not self.audio_capture.is_running:
+                self.audio_capture.start()
+                
+            # Mark listening as active
+            self._listening_active = True
+            
+            # Update UI
+            self._update_ui()
+            
+            logger.info("Wake word detection started")
+        except Exception as e:
+            logger.error(f"Error starting wake word detection: {e}")
+            self._listening_active = False
+    
+    def _process_audio_frame(self):
+        """Process a single audio frame for wake word detection"""
+        try:
+            if not self.audio_capture or not self.feature_extractor or not self.wake_word_detector:
+                return
+                
+            # Get audio frame from capture
+            audio_frame = self.audio_capture.get_buffer()
+            
+            # Extract features
+            features = self.feature_extractor.extract(audio_frame)
+            
+            # Detect wake word if we have features
+            if features is not None:
+                # The detection callback will be triggered if wake word is detected
+                self.wake_word_detector.detect(features)
+                
+        except Exception as e:
+            logger.error(f"Error processing audio frame: {e}")
+                
+    def _stop_audio_components(self):
+        """Stop audio processing components"""
+        try:
+            # Stop audio capture
+            if self.audio_capture:
+                self.audio_capture.stop()
+                
+            # Mark listening as inactive
+            self._listening_active = False
+            
+            # Update UI
+            self._update_ui()
+            
+            logger.info("Wake word detection stopped")
+        except Exception as e:
+            logger.error(f"Error stopping audio components: {e}")
+            
     def _process_commands(self):
         """Process commands from the queue"""
         try:
@@ -237,8 +316,8 @@ class VoiceManager:
                 
             elif command == "disable":
                 # Stop wake word detection if running
-                if hasattr(self, '_wake_word_running') and self._wake_word_running:
-                    self._stop_wake_word_detection()
+                if hasattr(self, '_listening_active') and self._listening_active:
+                    self._stop_audio_components()
                     
                 self._transition_to(VoiceState.INACTIVE)
                 logger.info("Voice features disabled")
@@ -268,38 +347,6 @@ class VoiceManager:
             pass
         except Exception as e:
             logger.error(f"Error processing command: {e}")
-            
-    def _start_wake_word_detection(self):
-        """Start wake word detection"""
-        try:
-            # Register detection callback
-            self.wake_word_detector.register_detection_callback(self._handle_wake_word_detected)
-            
-            # Start detection
-            self.wake_word_detector.start()
-            self._wake_word_running = True
-            
-            # Update UI
-            self._update_ui()
-            
-            logger.info("Wake word detection started")
-        except Exception as e:
-            logger.error(f"Error starting wake word detection: {e}")
-            self._wake_word_running = False
-            
-    def _stop_wake_word_detection(self):
-        """Stop wake word detection"""
-        try:
-            # Stop detection
-            self.wake_word_detector.stop()
-            self._wake_word_running = False
-            
-            # Update UI
-            self._update_ui()
-            
-            logger.info("Wake word detection stopped")
-        except Exception as e:
-            logger.error(f"Error stopping wake word detection: {e}")
             
     def _run_stt(self):
         """Run STT and handle the result"""

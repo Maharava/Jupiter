@@ -32,8 +32,7 @@ def llm_speak(text):
     
     try:
         # Use a single command with the text file as input (no chunking)
-        # Uses a faster speech rate with length_scale=0.65
-        generate_command = f'"{piper_exe}" -m "{model_path}" --length_scale 0.9 --speaker 3 --output_raw < "{temp_path}" | ffplay -f s16le -ar 22050 -i pipe: -nodisp -autoexit > NUL 2>&1'
+        generate_command = f'"{piper_exe}" -m "{model_path}" --length_scale 1.1 --speaker 3 --output_raw < "{temp_path}" | ffplay -f s16le -ar 22050 -i pipe: -nodisp -autoexit > NUL 2>&1'
         
         # Run the command
         subprocess.run(generate_command, shell=True)
