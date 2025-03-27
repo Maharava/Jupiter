@@ -1,9 +1,34 @@
 """
 Adapter layer between Jupiter's AudioCapture and the wake word detector.
-This allows for easy swapping of wake word systems while maintaining the interface.
 """
 
-from utils.io.io import AudioCapture, WakeWordDetector, FeatureExtractor
+# Import from the actual io-wake-word package
+import io-wake-word as iww  # Replace with actual package import
 
-# Re-export the classes for backwards compatibility
-__all__ = ["AudioCapture", "WakeWordDetector", "FeatureExtractor"]
+class AudioCapture:
+    """Captures audio from microphone"""
+    def __init__(self):
+        self.capture = iww.AudioCapture()
+        self.is_running = False
+    
+    def start(self):
+        self.capture.start()
+        self.is_running = True
+    
+    def stop(self):
+        self.capture.stop()
+        self.is_running = False
+    
+    def get_buffer(self):
+        return self.capture.get_audio_buffer()
+
+class FeatureExtractor:
+    """Extracts features from audio data"""
+    def __init__(self):
+        self.extractor = iww.FeatureExtractor()
+    
+    def extract_features(self, audio_data):
+        return self.extractor.process(audio_data)
+
+# Re-export classes
+__all__ = ["AudioCapture", "FeatureExtractor"]

@@ -1,9 +1,26 @@
 """
 Adapter layer for the wake word detector models.
-This allows for easy swapping of wake word systems while maintaining the interface.
 """
 
-from utils.io.io import WakeWordDetector
+# Import from the actual io-wake-word package
+import io-wake-word as iww  # Replace with actual package import 
 
-# Re-export the class for backwards compatibility
+class WakeWordDetector:
+    """Detects wake words in audio stream"""
+    def __init__(self, model_path=None):
+        self.detector = iww.WakeWordDetector(model_path=model_path)
+        self.is_running = False
+    
+    def start(self):
+        self.detector.start()
+        self.is_running = True
+    
+    def stop(self):
+        self.detector.stop()
+        self.is_running = False
+    
+    def register_detection_callback(self, callback):
+        self.detector.on_detection(callback)
+
+# Re-export class
 __all__ = ["WakeWordDetector"]
