@@ -3,6 +3,7 @@ import json
 import datetime
 import threading
 import re
+import logging
 
 from user_id_commands import handle_id_commands
 from utils.intent_recog import load_model, get_intent
@@ -11,7 +12,10 @@ from utils.text_processing import count_tokens, truncate_to_token_limit
 from utils.piper import llm_speak
 from utils.calendar.prompt_enhancer import enhance_prompt
 from utils.calendar import process_calendar_command
-from utils.voice_manager import VoiceManager
+from utils.voice_manager import VoiceManager, VoiceState
+
+# Set up logging
+logger = logging.getLogger("jupiter.core.chat_engine")
 
 class ChatEngine:
     """Core chat functionality for Jupiter"""
@@ -37,77 +41,91 @@ class ChatEngine:
         try:
             self.intent_classifier, self.intent_vectorizer = load_model()
         except Exception as e:
+            logger.error(f"Failed to load intent model: {e}")
             print(f"Failed to load intent model: {e}")
             self.intent_classifier = None
             self.intent_vectorizer = None
         
         # Initialize voice manager
-        try:
-            # Get wake word model path from config if available
-            wake_word_model = config.get('voice', {}).get('wake_word_model', None)
-            
-            # If we have a relative path, make it absolute
-            if wake_word_model and not os.path.isabs(wake_word_model):
-                # First check if the file exists as is
-                if not os.path.exists(wake_word_model):
-                    # Then try to make it absolute
-                    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                    absolute_path = os.path.join(base_dir, wake_word_model)
-                    if os.path.exists(absolute_path):
-                        wake_word_model = absolute_path
-                    else:
-                        logger.warning(f"Wake word model not found at {wake_word_model} or {absolute_path}")
-                
-            # Enable voice by default unless disabled in config
-            voice_enabled = config.get('voice', {}).get('enabled', True)
-            
-            self.voice_manager = VoiceManager(
-                chat_engine=self,
-                ui=ui,
-                model_path=wake_word_model,
-                enabled=voice_enabled and not test_mode  # Disable in test mode
-            )
-        except Exception as e:
-            logger.error(f"Failed to initialize voice manager: {e}")
-            print(f"Failed to initialize voice manager: {e}")
-            self.voice_manager = None
-
-        if self.test_mode:
-            print(f"🧪 ChatEngine initialized in TEST MODE")
+        self.voice_manager = self._initialize_voice_manager()
         
         if self.test_mode:
             print(f"🧪 ChatEngine initialized in TEST MODE")
-            
-        # Initialize voice manager
+    
+    def _initialize_voice_manager(self):
+        """Initialize voice manager with improved error handling and model detection"""
         try:
             # Get wake word model path from config if available
-            wake_word_model = config.get('voice', {}).get('wake_word_model', None)
+            wake_word_model = self.config.get('voice', {}).get('wake_word_model', None)
+            voice_enabled = self.config.get('voice', {}).get('enabled', True)
             
-            # If we have a relative path, make it absolute
-            if wake_word_model and not os.path.isabs(wake_word_model):
-                wake_word_model = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), wake_word_model)
+            if not wake_word_model:
+                logger.warning("No wake word model specified in config")
+                if hasattr(self.ui, 'set_status'):
+                    self.ui.set_status("Voice unavailable - no model specified", False)
+                return None
                 
-            # Enable voice by default unless disabled in config
-            voice_enabled = config.get('voice', {}).get('enabled', True)
+            # Properly resolve model path with multiple fallbacks
+            resolved_model_path = self._resolve_model_path(wake_word_model)
             
-            self.voice_manager = VoiceManager(
+            if not resolved_model_path:
+                logger.error(f"Could not find wake word model file: {wake_word_model}")
+                if hasattr(self.ui, 'set_status'):
+                    self.ui.set_status("Voice unavailable - model not found", False)
+                return None
+                
+            # Create voice manager with the resolved path
+            manager = VoiceManager(
                 chat_engine=self,
-                ui=ui,
-                model_path=wake_word_model,
-                enabled=voice_enabled and not test_mode  # Disable in test mode
+                ui=self.ui,
+                model_path=resolved_model_path,
+                enabled=voice_enabled and not self.test_mode  # Disable in test mode
             )
+            
+            # Log success
+            logger.info(f"Voice manager initialized with model: {resolved_model_path}")
+            
+            return manager
+            
         except Exception as e:
-            print(f"Failed to initialize voice manager: {e}")
-            self.voice_manager = None
+            logger.error(f"Failed to initialize voice manager: {e}", exc_info=True)
+            if hasattr(self.ui, 'set_status'):
+                self.ui.set_status(f"Voice initialization error: {str(e)[:50]}", False)
+            return None
+    
+    def _resolve_model_path(self, model_name):
+        """Resolve model path with multiple fallback locations"""
+        # If it's already an absolute path and exists, use it directly
+        if os.path.isabs(model_name) and os.path.exists(model_name):
+            return model_name
+            
+        # Get base directory for relative paths
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # Try multiple potential locations for the model file
+        potential_paths = [
+            model_name,  # Try as-is first (might be in current directory)
+            os.path.join(base_dir, model_name),  # Try in project root
+            os.path.join(base_dir, "models", model_name),  # Try in models subdirectory
+            os.path.join(base_dir, "assets", model_name),  # Try in assets subdirectory
+            os.path.join(base_dir, "utils", "io_wake_word", "models", model_name)  # Try in wake word module dir
+        ]
+        
+        # Check each potential path
+        for path in potential_paths:
+            if os.path.exists(path):
+                logger.info(f"Found wake word model at: {path}")
+                return path
+                
+        # If we get here, model not found
+        return None
     
     def _speak_response(self, text):
-        """Helper to speak responses if available"""
+        """Convert text to speech using Piper with error handling"""
         try:
-            from utils.piper import llm_speak
             llm_speak(text)
-        except ImportError:
-            # TTS not available
-            pass
+        except Exception as e:
+            logger.error(f"Error in text-to-speech: {e}")
     
     def add_to_conversation_history(self, message):
         """Add a message to conversation history with size management"""
@@ -138,6 +156,9 @@ class ChatEngine:
             if self.test_mode:
                 default_prompt += "\n\n## TEST MODE\nYou are currently running in offline test mode. No LLM backend is being used."
             
+            # Create directory if needed
+            os.makedirs(os.path.dirname(system_prompt_path), exist_ok=True)
+            
             with open(system_prompt_path, 'w', encoding='utf-8') as f:
                 f.write(default_prompt)
             return default_prompt
@@ -161,11 +182,15 @@ class ChatEngine:
             if category == 'name':
                 continue
                 
+            # Skip system fields
+            if category in ['user_id', 'created_at', 'last_seen', 'platforms']:
+                continue
+                
             # Format lists (likes, dislikes, etc.)
             if isinstance(value, list) and value:
                 formatted_info += f"- {category.capitalize()}: {', '.join(value)}\n"
             # Format simple key-value pairs
-            elif value and not isinstance(value, list):
+            elif value and not isinstance(value, list) and not isinstance(value, dict):
                 formatted_info += f"- {category.capitalize()}: {value}\n"
         
         return formatted_info
@@ -181,7 +206,10 @@ class ChatEngine:
         # Add calendar information to system prompt if available
         if self.user_data_manager.current_user and 'name' in self.user_data_manager.current_user:
             user_id = self.user_data_manager.current_user.get('name')
-            enhanced_system_prompt = enhance_prompt(user_id, enhanced_system_prompt)
+            try:
+                enhanced_system_prompt = enhance_prompt(user_id, enhanced_system_prompt)
+            except Exception as e:
+                logger.error(f"Error enhancing prompt with calendar data: {e}")
         
         user_prefix = f"{self.user_data_manager.current_user.get('name', 'User')}:"
         
@@ -231,7 +259,7 @@ class ChatEngine:
         }
         
         # Track which keys we've processed
-        processed_keys = set()
+        processed_keys = set(['user_id', 'created_at', 'last_seen', 'platforms'])  # Skip system fields
         
         # Add information by category groups
         for category_group, keys in categories.items():
@@ -271,8 +299,8 @@ class ChatEngine:
         
         return memory_display
     
-    def update_handle_user_commands(self, user_input):
-        """Updated handle_user_commands method for ChatEngine"""
+    def handle_user_commands(self, user_input):
+        """Handle user commands with voice system integration"""
         # Add platform tracking for the ChatEngine
         self.current_platform = "gui"
         if hasattr(self.ui, 'is_terminal') and self.ui.is_terminal:
@@ -299,7 +327,9 @@ class ChatEngine:
                 enabled = self.voice_manager.toggle_voice(enabled)
                 return f"Voice recognition {'enabled' if enabled else 'disabled'}"
             else:
-                return "Voice recognition is not available"
+                if hasattr(self.ui, 'set_status'):
+                    self.ui.set_status("Voice system not available", False)
+                return "Voice recognition system is not available - check the log for details"
         
         elif user_input.startswith('/name '):
             # Command to change username
@@ -340,23 +370,45 @@ class ChatEngine:
                     return "Calendar preferences are not available in this mode."
                     
             # Handle other calendar commands
-            user_id = self.user_data_manager.current_user.get('user_id')
-            response = process_calendar_command(user_id, user_input)
-            self._speak_response("Here's your calendar information.")
-            return response
+            try:
+                user_id = self.user_data_manager.current_user.get('user_id')
+                response = process_calendar_command(user_id, user_input)
+                self._speak_response("Here's your calendar information.")
+                return response
+            except Exception as e:
+                logger.error(f"Error processing calendar command: {e}")
+                return f"Error processing calendar command: {str(e)}"
+        
+        elif user_input.startswith('/debug') and user_input.lower().startswith('/debug voice'):
+            # Special command to debug voice system
+            if not self.voice_manager:
+                return "Voice system not initialized. Check log for errors."
+                
+            debug_info = [
+                "Voice System Debug Information:",
+                f"- Current state: {self.voice_manager.state.name if hasattr(self.voice_manager.state, 'name') else 'Unknown'}",
+                f"- Enabled: {self.voice_manager.enabled}",
+                f"- Model path: {self.voice_manager.model_path or 'Not found'}",
+                f"- Model exists: {os.path.exists(self.voice_manager.model_path) if self.voice_manager.model_path else False}",
+                f"- Wake word detector: {'Initialized' if self.voice_manager.wake_word_detector else 'Not initialized'}",
+                f"- Audio capture: {'Active' if hasattr(self.voice_manager, 'audio_capture') and self.voice_manager.audio_capture else 'Not active'}"
+            ]
+            
+            return "\n".join(debug_info)
         
         elif user_input == '/help':
             # Show available commands
             help_text = """
-    Available commands:
-    /voice on|off - Enable or disable voice recognition
-    /name [new name] - Change your name
-    /memory - Show what I remember about you
-    /id - Show your Jupiter ID information
-    /link [platform] [username] - Link your identity with another platform
-    /calendar [subcommand] - Manage your calendar (try '/calendar help' for details)
-    /calendar preferences - Configure notification settings
-    /help - Show this help message
+Available commands:
+/voice on|off - Enable or disable voice recognition
+/name [new name] - Change your name
+/memory - Show what I remember about you
+/id - Show your Jupiter ID information
+/link [platform] [username] - Link your identity with another platform
+/calendar [subcommand] - Manage your calendar (try '/calendar help' for details)
+/calendar preferences - Configure notification settings
+/debug voice - Show voice system diagnostic information
+/help - Show this help message
             """
             
             # Add test mode info
@@ -377,71 +429,14 @@ class ChatEngine:
                 self.voice_manager.stop()
             
             # Shut down calendar notifications if enabled
-            from utils.calendar import shutdown_calendar_daemon
-            shutdown_calendar_daemon()
+            try:
+                from utils.calendar import shutdown_calendar_daemon
+                shutdown_calendar_daemon()
+            except ImportError:
+                pass
         except:
             pass
             
-    def handle_initial_greeting(self):
-        """Handle initial greeting and user identification"""
-        # Start a new log file
-        self.logger.start_new_log()
-        
-        # Special test mode greeting if applicable
-        test_mode_notice = ""
-        if self.test_mode:
-            test_mode_notice = " (TEST MODE - No LLM connection)"
-        
-        # Ask for name
-        greeting = f"I'm Jupiter{test_mode_notice}, your AI assistant. Please enter your name. Please ONLY type your name in. Consider it a username."
-        self.ui.print_jupiter_message(greeting)
-        llm_speak("I'm Jupiter, your AI assistant. Please enter your name.")
-        
-        while True:
-            name = self.ui.get_user_input()
-            
-            # Check for exit command
-            if self.ui.handle_exit_command(name):
-                self.ui.exit_program()
-            
-            # If a name was entered, proceed
-            if name:
-                break
-            else:
-                prompt = "Please enter a name or type 'exit' to quit."
-                self.ui.print_jupiter_message(prompt)
-                llm_speak(prompt)
-        
-        # Identify user and get user data
-        user_data, actual_name = self.user_data_manager.identify_user(name)
-        self.user_data_manager.set_current_user(user_data)
-        
-        # Check if this is a returning user
-        if actual_name.lower() == name.lower() and actual_name != name:
-            # This is a returning user with different capitalization
-            welcome = f"Welcome back, {actual_name}! It's great to chat with you again."
-            if self.test_mode:
-                welcome += " (TEST MODE ACTIVE)"
-            
-            self.ui.print_jupiter_message(welcome)
-            llm_speak(f"Welcome back, {actual_name}! It's great to chat with you again.")
-        elif 'likes' in user_data or 'interests' in user_data:
-            # This is a returning user with known preferences
-            welcome = f"Welcome back, {actual_name}! It's great to chat with you again."
-            if self.test_mode:
-                welcome += " (TEST MODE ACTIVE)"
-            
-            self.ui.print_jupiter_message(welcome)
-            llm_speak(f"Welcome back, {actual_name}! It's great to chat with you again.")
-        else:
-            # New user or user without preferences
-            greeting = f"Nice to meet you, {name}! How can I help you today?"
-            if self.test_mode:
-                greeting += " (TEST MODE ACTIVE)"
-            
-            self.ui.print_jupiter_message(greeting)
-            llm_speak(f"Nice to meet you, {name}! How can I help you today?")
-    
     def restart_chat(self):
         """Restart chat session while preserving user data"""
         # Log that we're restarting
@@ -469,7 +464,7 @@ class ChatEngine:
         
         greeting = f"Hello again, {self.user_data_manager.current_user.get('name', 'User')}! How can I help you today?"
         self.ui.print_jupiter_message(greeting)
-        llm_speak(greeting)
+        self._speak_response(greeting)
         
         # Reset status if it's a GUI
         if hasattr(self.ui, 'set_status'):
@@ -494,7 +489,7 @@ class ChatEngine:
         self.ui.show_knowledge_view()
         
         # Speak notification
-        llm_speak("Showing your knowledge profile.")
+        self._speak_response("Showing your knowledge profile.")
         
         # Reset status
         if hasattr(self.ui, 'set_status'):
@@ -512,58 +507,69 @@ class ChatEngine:
         # Process all edits in the queue
         edits_processed = False
         while not self.ui.knowledge_edit_queue.empty():
-            edit = self.ui.knowledge_edit_queue.get()
-            
-            # Handle different edit types
-            if edit["action"] == "edit":
-                # Update simple value
-                self.user_data_manager.current_user[edit["category"]] = edit["new_value"]
-                print(f"Updated {edit['category']} from '{edit['old_value']}' to '{edit['new_value']}'")
-                edits_processed = True
-                    
-            elif edit["action"] == "remove":
-                # Remove category entirely
-                if edit["category"] in self.user_data_manager.current_user:
-                    del self.user_data_manager.current_user[edit["category"]]
-                    print(f"Removed {edit['category']}")
-                    edits_processed = True
-                    
-            elif edit["action"] == "add_list_item":
-                # Add item to list
-                category = edit["category"]
-                new_item = edit["value"]
+            try:
+                edit = self.ui.knowledge_edit_queue.get()
                 
-                # Create list if it doesn't exist
-                if category not in self.user_data_manager.current_user:
-                    self.user_data_manager.current_user[category] = []
-                    
-                # Add item if it's not already in the list
-                if new_item not in self.user_data_manager.current_user[category]:
-                    self.user_data_manager.current_user[category].append(new_item)
-                    print(f"Added '{new_item}' to {category}")
+                # Handle different edit types
+                if edit["action"] == "edit":
+                    # Update simple value
+                    self.user_data_manager.current_user[edit["category"]] = edit["new_value"]
+                    logger.info(f"Updated {edit['category']} from '{edit['old_value']}' to '{edit['new_value']}'")
                     edits_processed = True
-                    
-            elif edit["action"] == "remove_list_item":
-                # Remove item from list
-                category = edit["category"]
-                item = edit["value"]
-                
-                # Remove item if list exists
-                if category in self.user_data_manager.current_user and isinstance(self.user_data_manager.current_user[category], list):
-                    if item in self.user_data_manager.current_user[category]:
-                        self.user_data_manager.current_user[category].remove(item)
-                        print(f"Removed '{item}' from {category}")
+                        
+                elif edit["action"] == "remove":
+                    # Remove category entirely
+                    if edit["category"] in self.user_data_manager.current_user:
+                        del self.user_data_manager.current_user[edit["category"]]
+                        logger.info(f"Removed {edit['category']}")
                         edits_processed = True
                         
-                    # If list is now empty, remove the category
-                    if not self.user_data_manager.current_user[category]:
-                        del self.user_data_manager.current_user[category]
-                        print(f"Removed empty category {category}")
+                elif edit["action"] == "add_list_item":
+                    # Add item to list
+                    category = edit["category"]
+                    new_item = edit["value"]
+                    
+                    # Create list if it doesn't exist
+                    if category not in self.user_data_manager.current_user:
+                        self.user_data_manager.current_user[category] = []
+                        
+                    # Add item if it's not already in the list
+                    if new_item not in self.user_data_manager.current_user[category]:
+                        self.user_data_manager.current_user[category].append(new_item)
+                        logger.info(f"Added '{new_item}' to {category}")
+                        edits_processed = True
+                        
+                elif edit["action"] == "remove_list_item":
+                    # Remove item from list
+                    category = edit["category"]
+                    item = edit["value"]
+                    
+                    # Remove item if list exists
+                    if category in self.user_data_manager.current_user and isinstance(self.user_data_manager.current_user[category], list):
+                        if item in self.user_data_manager.current_user[category]:
+                            self.user_data_manager.current_user[category].remove(item)
+                            logger.info(f"Removed '{item}' from {category}")
+                            edits_processed = True
+                            
+                        # If list is now empty, remove the category
+                        if not self.user_data_manager.current_user[category]:
+                            del self.user_data_manager.current_user[category]
+                            logger.info(f"Removed empty category {category}")
+                
+                # Mark the task as done
+                self.ui.knowledge_edit_queue.task_done()
+                
+            except Exception as e:
+                logger.error(f"Error processing knowledge edit: {e}")
+                try:
+                    self.ui.knowledge_edit_queue.task_done()
+                except:
+                    pass
         
         # Save changes to user model
         if edits_processed:
             self.user_data_manager.save_current_user()
-            llm_speak("Knowledge profile updated.")
+            self._speak_response("Knowledge profile updated.")
     
     def run(self):
         """Run the chat interface"""
@@ -599,14 +605,19 @@ class ChatEngine:
         if self.voice_manager and not self.test_mode:
             # Setup UI feedback
             if hasattr(self.ui, 'setup_voice_indicator'):
+                # Set UI callback for state updates before starting
+                self.voice_manager.set_ui_callback(self.ui.update_voice_state)
+                
+                # Set up indicator with toggle callback
                 self.ui.setup_voice_indicator(
                     lambda: self.voice_manager.toggle_voice()
                 )
-                # Set UI callback for state updates
-                self.voice_manager.set_ui_callback(self.ui.update_voice_state)
             
             # Start the voice manager
             self.voice_manager.start()
+        elif hasattr(self.ui, 'update_voice_state'):
+            # Update voice indicator to show it's permanently inactive
+            self.ui.update_voice_state(VoiceState.INACTIVE)
         
         # Main chat loop
         while True:
@@ -617,7 +628,7 @@ class ChatEngine:
             # Check for exit command
             if self.ui.handle_exit_command(user_input):
                 exit_message = "Ending chat session. Goodbye!"
-                llm_speak(exit_message)
+                self._speak_response(exit_message)
                 break
             
             # Check for specific keywords that might trigger intent recognition
@@ -640,7 +651,7 @@ class ChatEngine:
                             
                         # Display, speak, and log response
                         self.ui.print_jupiter_message(response)
-                        llm_speak(response)
+                        self._speak_response(response)
                         self.logger.log_message("Jupiter:", response)
                         
                         # Reset status if UI supports it
@@ -703,7 +714,7 @@ class ChatEngine:
             self.logger.log_message("Jupiter:", response)
             
             # Speak the response directly
-            llm_speak(response)
+            self._speak_response(response)
             
             # Add response to history with memory management
             self.add_to_conversation_history(f"Jupiter: {response}")
@@ -714,3 +725,63 @@ class ChatEngine:
                     self.ui.set_status("TEST MODE - Ready")
                 else:
                     self.ui.set_status("Ready")
+    
+    def handle_initial_greeting(self):
+        """Handle initial greeting and user identification"""
+        # Start a new log file
+        self.logger.start_new_log()
+        
+        # Special test mode greeting if applicable
+        test_mode_notice = ""
+        if self.test_mode:
+            test_mode_notice = " (TEST MODE - No LLM connection)"
+        
+        # Ask for name
+        greeting = f"I'm Jupiter{test_mode_notice}, your AI assistant. Please enter your name. Please ONLY type your name in. Consider it a username."
+        self.ui.print_jupiter_message(greeting)
+        self._speak_response("I'm Jupiter, your AI assistant. Please enter your name.")
+        
+        while True:
+            name = self.ui.get_user_input()
+            
+            # Check for exit command
+            if self.ui.handle_exit_command(name):
+                self.ui.exit_program()
+            
+            # If a name was entered, proceed
+            if name:
+                break
+            else:
+                prompt = "Please enter a name or type 'exit' to quit."
+                self.ui.print_jupiter_message(prompt)
+                self._speak_response(prompt)
+        
+        # Identify user and get user data
+        user_data, actual_name = self.user_data_manager.identify_user(name)
+        self.user_data_manager.set_current_user(user_data)
+        
+        # Check if this is a returning user
+        if actual_name.lower() == name.lower() and actual_name != name:
+            # This is a returning user with different capitalization
+            welcome = f"Welcome back, {actual_name}! It's great to chat with you again."
+            if self.test_mode:
+                welcome += " (TEST MODE ACTIVE)"
+            
+            self.ui.print_jupiter_message(welcome)
+            self._speak_response(f"Welcome back, {actual_name}! It's great to chat with you again.")
+        elif 'likes' in user_data or 'interests' in user_data:
+            # This is a returning user with known preferences
+            welcome = f"Welcome back, {actual_name}! It's great to chat with you again."
+            if self.test_mode:
+                welcome += " (TEST MODE ACTIVE)"
+            
+            self.ui.print_jupiter_message(welcome)
+            self._speak_response(f"Welcome back, {actual_name}! It's great to chat with you again.")
+        else:
+            # New user or user without preferences
+            greeting = f"Nice to meet you, {name}! How can I help you today?"
+            if self.test_mode:
+                greeting += " (TEST MODE ACTIVE)"
+            
+            self.ui.print_jupiter_message(greeting)
+            self._speak_response(f"Nice to meet you, {name}! How can I help you today.")

@@ -11,6 +11,7 @@ from ui.components.knowledge_view import KnowledgeView
 from ui.components.status_bar import StatusBar
 from ui.components.voice_indicator import VoiceIndicator
 from ui.utils.message_processor import MessageProcessor
+from utils.voice_manager import VoiceState
 
 # Set up logging
 logger = logging.getLogger("jupiter.gui")
@@ -46,12 +47,16 @@ class GUIInterface:
         # Button callbacks
         self.restart_callback = None
         self.knowledge_callback = None
+        self.voice_toggle_callback = None
         
         # Voice indicator reference
         self.voice_indicator = None
         
         # Initialize tracking for pending operations
         self._pending_after_ids = []
+        
+        # Debugging state for voice
+        self.voice_debug_mode = False
         
         # Start GUI in a separate thread with proper error handling
         self.gui_thread = threading.Thread(target=self._run_gui)
@@ -108,6 +113,19 @@ class GUIInterface:
                 command=self._handle_knowledge
             )
             knowledge_button.pack(side=tk.LEFT, padx=5)
+            
+            # Create Voice Debug button
+            debug_button = tk.Button(
+                button_frame,
+                text="VDebug",
+                bg="#333",
+                fg="white",
+                relief=tk.FLAT,
+                padx=10,
+                pady=2,
+                command=self._toggle_voice_debug
+            )
+            debug_button.pack(side=tk.LEFT, padx=5)
             
             # Create Calendar Preferences button if available
             self._setup_calendar_button(button_frame)
@@ -241,6 +259,53 @@ class GUIInterface:
             self.is_running = False
             self.gui_ready.set()  # Set event to unblock main thread
     
+    def _toggle_voice_debug(self):
+        """Toggle voice debug mode for diagnostics"""
+        self.voice_debug_mode = not self.voice_debug_mode
+        if self.voice_debug_mode:
+            self.set_status("Voice debug mode enabled", True)
+            if hasattr(self, 'voice_indicator') and self.voice_indicator:
+                self._schedule_safe_update(lambda: self._check_voice_state_debug())
+        else:
+            self.set_status("Voice debug mode disabled", False)
+    
+    def _check_voice_state_debug(self):
+        """Check voice state and display debug info"""
+        if not self.voice_debug_mode:
+            return
+            
+        try:
+            status_text = "Voice Debug Info:\n"
+            
+            # Try to access voice manager from chat engine
+            if hasattr(self, '_chat_engine') and self._chat_engine:
+                vm = getattr(self._chat_engine, 'voice_manager', None)
+                if vm:
+                    status_text += f"State: {vm.state.name if hasattr(vm.state, 'name') else 'Unknown'}\n"
+                    status_text += f"Enabled: {vm.enabled}\n"
+                    status_text += f"Running: {vm.running}\n"
+                    status_text += f"Model Path: {vm.model_path}\n"
+                    status_text += f"Wake Word Detector: {'Active' if vm.wake_word_detector else 'None'}\n"
+                    
+                    # Check if audio components are active
+                    listening_active = getattr(vm, '_listening_active', False)
+                    status_text += f"Listening Active: {listening_active}\n"
+                else:
+                    status_text += "Voice Manager not found\n"
+            else:
+                status_text += "Chat Engine not available\n"
+                
+            # Display info in chat
+            self.output_queue.put({"type": "jupiter", "text": status_text})
+            
+            # Schedule next check in 5 seconds if debug mode is still on
+            if self.voice_debug_mode:
+                self._schedule_safe_update(lambda: self._check_voice_state_debug())
+                
+        except Exception as e:
+            logger.error(f"Error in voice debug: {e}")
+            self.output_queue.put({"type": "jupiter", "text": f"Voice Debug Error: {str(e)}"})
+    
     def _setup_icons(self):
         """Set up window icons with proper error handling"""
         try:
@@ -342,11 +407,14 @@ class GUIInterface:
             return
             
         try:
+            # Store callback for diagnostics
+            self.voice_toggle_callback = toggle_callback
+            
             # Create indicator in status area
             status_frame = self.status_bar.get_frame()
             
             # Create the voice indicator
-            self.voice_indicator = VoiceIndicator(status_frame, callback=toggle_callback)
+            self.voice_indicator = VoiceIndicator(status_frame, callback=self._handle_voice_toggle)
             
             # Position it next to the status label
             self.voice_indicator.pack(side=tk.RIGHT, padx=10)
@@ -357,6 +425,20 @@ class GUIInterface:
             
         except Exception as e:
             logger.error(f"Error setting up voice indicator: {e}")
+    
+    def _handle_voice_toggle(self):
+        """Handle voice indicator click with proper error handling"""
+        try:
+            if self.voice_debug_mode:
+                # In debug mode, show detailed status
+                self._check_voice_state_debug()
+                
+            # Call the original toggle function if available
+            if self.voice_toggle_callback and callable(self.voice_toggle_callback):
+                self.voice_toggle_callback()
+        except Exception as e:
+            logger.error(f"Error handling voice toggle: {e}")
+            self.set_status(f"Voice toggle error: {str(e)}", True)
             
     def update_voice_state(self, state):
         """Update the voice indicator state with proper error handling"""
@@ -366,6 +448,11 @@ class GUIInterface:
         try:
             # Schedule update on main thread
             self._schedule_safe_update(lambda: self.voice_indicator.update_state(state))
+            
+            # If state is INACTIVE and we're in debug mode, show an explanation
+            if self.voice_debug_mode and state and hasattr(state, 'name') and state.name == "INACTIVE":
+                self.set_status("Voice inactive - check wake word model", True)
+                
         except Exception as e:
             logger.error(f"Error updating voice state: {e}")
     
@@ -525,7 +612,7 @@ class GUIInterface:
         try:
             # Cancel any pending after() calls
             if hasattr(self, 'root') and self.root and self.root.winfo_exists():
-                for after_id in self._pending_after_ids:
+                for after_id in list(self._pending_after_ids):
                     try:
                         self.root.after_cancel(after_id)
                     except Exception:
@@ -767,3 +854,7 @@ class GUIInterface:
     def set_knowledge_callback(self, callback):
         """Set the callback for knowledge button"""
         self.knowledge_callback = callback
+        
+    def register_chat_engine(self, chat_engine):
+        """Register chat engine for debugging access"""
+        self._chat_engine = chat_engine
