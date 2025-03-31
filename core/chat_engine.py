@@ -75,31 +75,7 @@ class ChatEngine:
             logger.error(f"Failed to initialize voice manager: {e}", exc_info=True)
             if hasattr(self.ui, 'set_status'):
                 self.ui.set_status(f"Voice initialization error: {str(e)[:50]}", False)
-            return None
-    
-    def _resolve_model_path(self, model_name):
-        """Resolve model path with multiple fallback locations"""
-        # If it's already an absolute path and exists, use it directly
-        if os.path.isabs(model_name) and os.path.exists(model_name):
-            return model_name
-            
-        # Get base directory for relative paths
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
-        # Try multiple potential locations for the model file
-        potential_paths = [
-            model_name,  # Try as-is first (might be in current directory)
-            os.path.join(base_dir, model_name),  # Try in project root
-            os.path.join(base_dir, "models", model_name),  # Try in models subdirectory
-            os.path.join(base_dir, "assets", model_name),  # Try in assets subdirectory
-            os.path.join(base_dir, "utils", "io_wake_word", "models", model_name)  # Try in wake word module dir
-        ]
-        
-        # Check each potential path
-        for path in potential_paths:
-            if os.path.exists(path):
-                logger.info(f"Found wake word model at: {path}")
-                return path
+            return None        
                 
         # If we get here, model not found
         return None
@@ -374,7 +350,6 @@ class ChatEngine:
                 f"- Enabled: {self.voice_manager.enabled}",
                 f"- Model path: {self.voice_manager.model_path or 'Not found'}",
                 f"- Model exists: {os.path.exists(self.voice_manager.model_path) if self.voice_manager.model_path else False}",
-                f"- Wake word detector: {'Initialized' if self.voice_manager.wake_word_detector else 'Not initialized'}",
                 f"- Audio capture: {'Active' if hasattr(self.voice_manager, 'audio_capture') and self.voice_manager.audio_capture else 'Not active'}"
             ]
             
