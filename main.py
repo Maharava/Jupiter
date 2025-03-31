@@ -5,7 +5,6 @@ import datetime
 from dotenv import load_dotenv
 import time
 
-# Add io-wake-word to imports
 from models.llm_client import LLMClient
 from models.user_data_manager import UserDataManager
 from utils.logger import Logger
@@ -54,11 +53,6 @@ def load_config():
         "ui": {
             "jupiter_color": "yellow",
             "user_color": "magenta"
-        },
-        "voice": {
-            "enabled": True,
-            "wake_word_model": "jupiter-wake-word.pth",  # This should point to your Io model
-            "stt_model_size": "tiny"
         }
     }
 

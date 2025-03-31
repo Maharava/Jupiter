@@ -13,6 +13,7 @@ from utils.piper import llm_speak
 from utils.calendar.prompt_enhancer import enhance_prompt
 from utils.calendar import process_calendar_command
 from utils.voice_manager import VoiceManager, VoiceState
+from utils.piper import llm_speak
 
 # Set up logging
 logger = logging.getLogger("jupiter.core.chat_engine")
@@ -53,40 +54,23 @@ class ChatEngine:
             print(f"🧪 ChatEngine initialized in TEST MODE")
     
     def _initialize_voice_manager(self):
-        """Initialize voice manager with improved error handling and model detection"""
+        """Initialize simplified voice manager for TTS only"""
         try:
-            # Get wake word model path from config if available
-            wake_word_model = self.config.get('voice', {}).get('wake_word_model', None)
+            # Get voice enabled setting from config
             voice_enabled = self.config.get('voice', {}).get('enabled', True)
             
-            if not wake_word_model:
-                logger.warning("No wake word model specified in config")
-                if hasattr(self.ui, 'set_status'):
-                    self.ui.set_status("Voice unavailable - no model specified", False)
-                return None
-                
-            # Properly resolve model path with multiple fallbacks
-            resolved_model_path = self._resolve_model_path(wake_word_model)
-            
-            if not resolved_model_path:
-                logger.error(f"Could not find wake word model file: {wake_word_model}")
-                if hasattr(self.ui, 'set_status'):
-                    self.ui.set_status("Voice unavailable - model not found", False)
-                return None
-                
-            # Create voice manager with the resolved path
+            # Create voice manager
             manager = VoiceManager(
                 chat_engine=self,
                 ui=self.ui,
-                model_path=resolved_model_path,
                 enabled=voice_enabled and not self.test_mode  # Disable in test mode
             )
             
             # Log success
-            logger.info(f"Voice manager initialized with model: {resolved_model_path}")
+            logger.info("Voice manager initialized for TTS only")
             
             return manager
-            
+                
         except Exception as e:
             logger.error(f"Failed to initialize voice manager: {e}", exc_info=True)
             if hasattr(self.ui, 'set_status'):
