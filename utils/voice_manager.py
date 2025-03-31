@@ -7,6 +7,7 @@ import os
 
 try:
     from io_wake_word.audio import AudioCapture
+    from io_wake_word.audio import FeatureExtractor
     from io_wake_word.models import WakeWordDetector
     WAKE_WORD_AVAILABLE = True
 except ImportError:
@@ -57,6 +58,7 @@ class VoiceManager:
         # Initialize components
         self.wake_word_detector = None
         self.audio_capture = None
+        self.feature_extractor = None
         
         # Initialize control thread and queues
         self.control_thread = None
@@ -80,7 +82,8 @@ class VoiceManager:
             os.path.join(base_dir, "models", model_path),  # Models folder
             os.path.join(base_dir, "assets", model_path),  # Assets folder
             os.path.join(base_dir, "io_wake_word", model_path),  # io_wake_word folder
-            os.path.join(base_dir, "utils", "io_wake_word", model_path)  # utils/io_wake_word folder
+            os.path.join(base_dir, "utils", "io_wake_word", model_path),  # utils/io_wake_word folder
+            os.path.join(base_dir, "io-wake-word", model_path),  # io-wake-word folder (with hyphen)
         ]
         
         # Search for the model file
@@ -111,7 +114,11 @@ class VoiceManager:
         if WAKE_WORD_AVAILABLE:
             if self.model_path:
                 try:
+                    # Initialize components one by one
+                    self.audio_capture = AudioCapture()
+                    self.feature_extractor = FeatureExtractor()
                     self.wake_word_detector = WakeWordDetector(model_path=self.model_path)
+                    
                     logger.info(f"Wake word detector initialized with model: {self.model_path}")
                 except Exception as e:
                     logger.error(f"Failed to initialize wake word detector: {e}")
@@ -272,7 +279,7 @@ class VoiceManager:
                     if not hasattr(self, '_listening_active') or not self._listening_active:
                         self._setup_listening()
                     
-                    # Process audio frame
+                    # Process audio frames
                     if hasattr(self, '_listening_active') and self._listening_active:
                         self._process_audio_frame()
                     
@@ -326,10 +333,18 @@ class VoiceManager:
                     logger.error(f"Failed to initialize audio capture: {e}")
                     self._transition_to(VoiceState.INACTIVE)
                     return False
+                    
+            if not self.feature_extractor:
+                try:
+                    self.feature_extractor = FeatureExtractor()
+                except Exception as e:
+                    logger.error(f"Failed to initialize feature extractor: {e}")
+                    self._transition_to(VoiceState.INACTIVE)
+                    return False
                 
             # Register wake word detection callback
             if self.wake_word_detector:
-                self.wake_word_detector.register_detection_callback(self._handle_wake_word_detected)
+                self.wake_word_detector.register_callback(self._handle_wake_word_detected)
                 
             # Start audio capture
             if not hasattr(self.audio_capture, 'is_running') or not self.audio_capture.is_running:
@@ -339,6 +354,10 @@ class VoiceManager:
                     logger.error(f"Failed to start audio capture: {e}")
                     self._transition_to(VoiceState.INACTIVE)
                     return False
+                
+            # Start wake word detector 
+            if self.wake_word_detector and hasattr(self.wake_word_detector, 'start'):
+                self.wake_word_detector.start()
                 
             # Mark listening as active
             self._listening_active = True
@@ -358,20 +377,20 @@ class VoiceManager:
     def _process_audio_frame(self):
         """Process a single audio frame for wake word detection"""
         try:
-            if not self.audio_capture or not self.wake_word_detector:
+            if not self.audio_capture or not self.wake_word_detector or not self.feature_extractor:
                 return
                 
             # Get audio frame from capture
             audio_buffer = self.audio_capture.get_buffer()
             
             if audio_buffer is not None and len(audio_buffer) > 0:
-                # Check if we need to start the detector
-                if not self.wake_word_detector.is_running:
-                    try:
-                        self.wake_word_detector.start()
-                    except Exception as e:
-                        logger.error(f"Failed to start wake word detector: {e}")
-                        self._transition_to(VoiceState.INACTIVE)
+                # Extract features from the audio buffer
+                features = self.feature_extractor.extract(audio_buffer)
+                
+                # Pass features to detector if available
+                if features is not None and hasattr(self.wake_word_detector, 'detect'):
+                    self.wake_word_detector.detect(features)
+                    
         except Exception as e:
             logger.error(f"Error processing audio frame: {e}")
                 
@@ -383,7 +402,7 @@ class VoiceManager:
                 self.audio_capture.stop()
                 
             # Stop wake word detector
-            if self.wake_word_detector and hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running:
+            if self.wake_word_detector and hasattr(self.wake_word_detector, 'stop'):
                 self.wake_word_detector.stop()
                 
             # Mark listening as inactive
