@@ -4,6 +4,7 @@ import argparse
 import datetime
 from dotenv import load_dotenv
 import time
+import logging
 
 from models.llm_client import LLMClient
 from models.user_data_manager import UserDataManager
@@ -12,6 +13,7 @@ from ui.terminal_interface import TerminalInterface
 from ui.gui_interface import GUIInterface
 from core.info_extractor import InfoExtractor
 from core.chat_engine import ChatEngine
+from io_wake_word.io_wake_word import WakeWordDetector
 
 load_dotenv()
 
@@ -58,7 +60,9 @@ def load_config():
 
 def main():
     """Main entry point for Jupiter Chat"""
-    # Parse command-line arguments
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger("main")
+
     parser = argparse.ArgumentParser(description="Jupiter Chat")
     parser.add_argument("--gui", action="store_true", help="Use GUI interface instead of terminal")
     parser.add_argument("--test", action="store_true", help="Run in offline test mode without LLM backend")
@@ -165,8 +169,29 @@ def main():
         else:
             print("⚠️ Discord failed to connect - check logs/discord.log for details")
 
+    # Initialize wake word detector
+    model_path = "models/jupiter-wake-word.pth"
+    detector = WakeWordDetector(model_path=model_path, device_index=0, threshold=0.85)
+    detector.start()
+
+    def on_wake_word_detected(confidence):
+        print(f"Wakeword detected! (confidence: {confidence:.4f})")
+
+    detector.register_detection_callback(on_wake_word_detected)
+
     # Run chat interface
-    chat_engine.run()
+    try:
+        logger.info("Listening for wake word... Press Ctrl+C to stop.")
+        while True:
+            if detector.is_detected():
+                print("Wakeword detected!")
+                # Add any additional actions to be triggered on wake word detection here
+            time.sleep(0.1)  # Sleep to avoid busy-waiting
+    except KeyboardInterrupt:
+        logger.info("Stopped by user")
+    finally:
+        detector.stop()
+        chat_engine.run()
 
 if __name__ == "__main__":
     main()

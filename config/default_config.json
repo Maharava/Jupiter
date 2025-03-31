@@ -36,4 +36,9 @@
     "prompt_detail_level": "normal",
     "default_reminder_minutes": 15
   },
+  {
+    "voice": {
+      "enabled": true
+    }
+  }
 }

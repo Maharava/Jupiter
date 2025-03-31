@@ -285,7 +285,6 @@ class GUIInterface:
                     status_text += f"Enabled: {vm.enabled}\n"
                     status_text += f"Running: {vm.running}\n"
                     status_text += f"Model Path: {vm.model_path}\n"
-                    status_text += f"Wake Word Detector: {'Active' if vm.wake_word_detector else 'None'}\n"
                     
                     # Check if audio components are active
                     listening_active = getattr(vm, '_listening_active', False)
@@ -450,8 +449,6 @@ class GUIInterface:
             self._schedule_safe_update(lambda: self.voice_indicator.update_state(state))
             
             # If state is INACTIVE and we're in debug mode, show an explanation
-            if self.voice_debug_mode and state and hasattr(state, 'name') and state.name == "INACTIVE":
-                self.set_status("Voice inactive - check wake word model", True)
                 
         except Exception as e:
             logger.error(f"Error updating voice state: {e}")
