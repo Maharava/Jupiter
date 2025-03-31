@@ -822,6 +822,121 @@ class GUIInterface:
         except Exception as e:
             logger.error(f"Error processing knowledge edits: {e}")
             
+    def display_status_bubble(self, text):
+        """Display a status bubble for voice interactions in GUI"""
+        if not hasattr(self, 'root') or not self.root:
+            return
+            
+        try:
+            import tkinter as tk
+            
+            # Create status bubble frame if it doesn't exist
+            if not hasattr(self, 'status_bubble') or not self.status_bubble:
+                self.status_bubble = tk.Frame(self.root, bg='#E0E0FF', padx=10, pady=5)
+                self.status_bubble.place(relx=0.5, rely=0.1, anchor=tk.CENTER)
+                
+                # Add microphone icon (using text as placeholder)
+                self.status_icon = tk.Label(self.status_bubble, text="🎤", bg='#E0E0FF', font=('Arial', 16))
+                self.status_icon.pack(side=tk.LEFT, padx=(0,5))
+                
+                # Add status text
+                self.status_text = tk.Label(self.status_bubble, text=text, bg='#E0E0FF', font=('Arial', 12))
+                self.status_text.pack(side=tk.RIGHT)
+            else:
+                # Update existing bubble
+                self.status_text.config(text=text)
+                self.status_bubble.lift()  # Bring to front
+                
+            # Schedule removal after 5 seconds unless it's a persistent status
+            if not text.startswith("Listening"):  # Don't auto-remove "Listening" statuses
+                self.root.after(5000, self.remove_status_bubble)
+                
+        except Exception as e:
+            print(f"Error displaying status bubble: {e}")
+        
+    def remove_status_bubble(self):
+        """Remove the status bubble from GUI"""
+        if hasattr(self, 'status_bubble') and self.status_bubble:
+            try:
+                self.status_bubble.place_forget()
+                self.status_bubble = None
+            except:
+                pass
+                
+    def update_voice_state(self, state):
+        """Update the GUI based on voice state changes"""
+        if not hasattr(self, 'voice_indicator') or not self.voice_indicator:
+            return
+            
+        try:
+            # Different colors for different states
+            colors = {
+                'INACTIVE': '#CCCCCC',  # Grey
+                'LISTENING': '#90EE90',  # Light Green
+                'FOCUSING': '#87CEFA',   # Light Blue 
+                'PROCESSING': '#FFA500', # Orange
+                'SPEAKING': '#FFD700'    # Gold
+            }
+            
+            # Get color for current state
+            state_name = state.name if hasattr(state, 'name') else 'INACTIVE'
+            color = colors.get(state_name, '#CCCCCC')
+            
+            # Update indicator color
+            self.voice_indicator.config(bg=color)
+            
+            # Update tooltip text
+            state_descriptions = {
+                'INACTIVE': 'Voice inactive',
+                'LISTENING': 'Listening for wake word',
+                'FOCUSING': 'Listening for command',
+                'PROCESSING': 'Processing command',
+                'SPEAKING': 'Speaking'
+            }
+            
+            tooltip_text = state_descriptions.get(state_name, 'Voice system')
+            
+            # This assumes you have a tooltip system - if not, simply define the tooltip_text attribute
+            if hasattr(self, 'create_tooltip'):
+                self.create_tooltip(self.voice_indicator, tooltip_text)
+            else:
+                # Simple fallback for tooltip
+                self.voice_indicator.tooltip_text = tooltip_text
+                
+        except Exception as e:
+            print(f"Error updating voice indicator: {e}")
+            
+    def setup_voice_indicator(self, toggle_callback):
+        """Set up voice indicator with toggle callback in GUI"""
+        if not hasattr(self, 'root') or not self.root:
+            return
+            
+        try:
+            import tkinter as tk
+            
+            # Create frame for voice controls if it doesn't exist
+            if not hasattr(self, 'toolbar') or not self.toolbar:
+                self.toolbar = tk.Frame(self.root, bg='#F0F0F0')
+                self.toolbar.pack(side=tk.BOTTOM, fill=tk.X)
+                
+            # Create voice indicator button
+            self.voice_indicator = tk.Button(
+                self.toolbar, 
+                text="🎤", 
+                width=2, 
+                bg='#CCCCCC',
+                font=('Arial', 12),
+                command=toggle_callback
+            )
+            self.voice_indicator.pack(side=tk.LEFT, padx=5, pady=2)
+            
+            # Set initial tooltip
+            if hasattr(self, 'create_tooltip'):
+                self.create_tooltip(self.voice_indicator, "Voice inactive (click to toggle)")
+            
+        except Exception as e:
+            print(f"Error setting up voice indicator: {e}")
+            
     def _process_knowledge_edits_batch(self, edits):
         """Process a batch of knowledge edits on the main thread"""
         edits_processed = 0

@@ -24,6 +24,24 @@ class TerminalInterface:
     def print_jupiter_message(self, message):
         """Print a message from Jupiter with correct color"""
         print(f"{self.JUPITER_COLOR}Jupiter:{self.Style.RESET_ALL} {message}")
+        
+    def display_status_bubble(self, text):
+        """Display a status bubble for voice interactions in terminal"""
+        print(f"\n[Voice] {text}\n")
+        
+    def remove_status_bubble(self):
+        """Remove the status bubble (does nothing in terminal)"""
+        pass
+        
+    def update_voice_state(self, state):
+        """Update the UI based on voice state changes (minimal for terminal)"""
+        # No visual indicator in terminal mode
+        pass
+        
+    def setup_voice_indicator(self, toggle_callback):
+        """Set up voice indicator with toggle callback (does nothing in terminal)"""
+        # No visual indicator to set up in terminal mode
+        pass
     
     def get_user_input(self, prefix="User"):
         """Get input from user with correct color"""

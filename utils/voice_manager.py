@@ -2,9 +2,19 @@ import threading
 import time
 import queue
 import logging
+import os
 from enum import Enum, auto
 
 from utils.piper import llm_speak
+from utils.whisper_stt import listen_and_transcribe
+
+# Import wake word detector
+try:
+    from io_wake_word.io_wake_word import WakeWordDetector
+    WAKE_WORD_AVAILABLE = True
+except ImportError as e:
+    WAKE_WORD_AVAILABLE = False
+    print(f"Warning: io_wake_word module not available: {e}")
 
 # Set up logging
 logger = logging.getLogger("jupiter.voice")
@@ -12,10 +22,13 @@ logger = logging.getLogger("jupiter.voice")
 class VoiceState(Enum):
     """States for the voice interaction state machine"""
     INACTIVE = auto()  # Voice features disabled
+    LISTENING = auto()  # Listening for wake word
+    FOCUSING = auto()   # Wake word detected, listening for command
+    PROCESSING = auto() # Processing command
     SPEAKING = auto()   # Jupiter is speaking
 
 class VoiceManager:
-    """Simplified voice manager for Jupiter - handles TTS only"""
+    """Voice manager for Jupiter - handles TTS, STT, and wake word detection"""
     
     def __init__(self, chat_engine, ui, model_path=None, enabled=True):
         """Initialize voice manager"""
@@ -23,15 +36,30 @@ class VoiceManager:
         self.ui = ui
         self.enabled = enabled
         
+        # Default model path if not provided
+        if not model_path:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            self.model_path = os.path.join(base_dir, "models", "jupiter-wake-word.pth")
+        else:
+            self.model_path = model_path
+        
         # Initialize state
         self.state = VoiceState.INACTIVE
         self.state_lock = threading.Lock()
         self.running = False
         
+        # Initialize wake word detection components
+        self.wake_word_detector = None
+        self.wake_word_thread = None
+        self.detector_available = WAKE_WORD_AVAILABLE and os.path.exists(self.model_path)
+        
         # Initialize control thread and queues
         self.control_thread = None
         self.command_queue = queue.Queue()
         self.update_ui_callback = None
+        
+        # Flag for active listening
+        self._listening_active = False
     
     def set_ui_callback(self, callback):
         """Set callback function for UI updates"""
@@ -53,19 +81,243 @@ class VoiceManager:
         )
         self.control_thread.start()
         
-        # Set initial state
-        self._transition_to(VoiceState.INACTIVE)
-        if hasattr(self.ui, 'set_status'):
-            self.ui.set_status("Voice active for speaking only", False)
+        # Start wake word detection if enabled and available
+        if self.enabled and self.detector_available:
+            self._start_wake_word_detection()
+            if hasattr(self.ui, 'set_status'):
+                self.ui.set_status("Listening for wake word", False)
+        else:
+            # Set initial state
+            self._transition_to(VoiceState.INACTIVE)
+            if hasattr(self.ui, 'set_status'):
+                if not self.detector_available and self.enabled:
+                    self.ui.set_status("Voice active for speaking only (wake word unavailable)", False)
+                else:
+                    self.ui.set_status("Voice active for speaking only", False)
             
-        logger.info(f"Voice manager started, enabled={self.enabled}")
+        logger.info(f"Voice manager started, enabled={self.enabled}, wake_word_available={self.detector_available}")
         
+    def _start_wake_word_detection(self):
+        """Start wake word detection in a background thread"""
+        if not self.detector_available:
+            logger.warning("Wake word detection not available")
+            return False
+            
+        try:
+            # Create the wake word detector
+            self.wake_word_detector = WakeWordDetector(
+                model_path=self.model_path,
+                threshold=0.85  # Detection threshold
+            )
+            
+            # Register wake word detection callback
+            self.wake_word_detector.register_detection_callback(self._on_wake_word_detected)
+            
+            # Start the detection thread
+            self.wake_word_thread = threading.Thread(
+                target=self._wake_word_detection_loop,
+                daemon=True,
+                name="WakeWordThread"
+            )
+            self.wake_word_thread.start()
+            
+            # Transition to listening state
+            self._transition_to(VoiceState.LISTENING)
+            
+            logger.info("Wake word detection started")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to start wake word detection: {e}")
+            self.wake_word_detector = None
+            return False
+            
+    def _wake_word_detection_loop(self):
+        """Background thread for wake word detection"""
+        try:
+            logger.info("Starting wake word detection loop")
+            
+            # Start the detector
+            self.wake_word_detector.start()
+            
+            # Use the blocking listen method with continuous option
+            self.wake_word_detector.listen_for_wake_word(
+                timeout=None,  # No timeout
+                continuous=True  # Keep listening after detection
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in wake word detection loop: {e}")
+        finally:
+            logger.info("Wake word detection loop ended")
+                
+    def _on_wake_word_detected(self, confidence):
+        """Called when wake word is detected"""
+        if not self.enabled:
+            logger.debug(f"Wake word detected (confidence: {confidence:.4f}) but voice is disabled")
+            return
+            
+        logger.info(f"Wake word detected (confidence: {confidence:.4f}) - starting to listen for command")
+        
+        # Check if we're already processing a command
+        current_state = self._get_state()
+        if current_state in [VoiceState.FOCUSING, VoiceState.PROCESSING, VoiceState.SPEAKING]:
+            logger.info(f"Ignoring wake word detection while in {current_state.name} state")
+            return
+        
+        # Transition to FOCUSING state
+        self._transition_to(VoiceState.FOCUSING)
+        
+        # Display status bubble in UI
+        if hasattr(self.ui, 'display_status_bubble'):
+            self.ui.display_status_bubble("Listening for command...")
+            
+        # Start listening for command in a separate thread to not block wake word detection
+        command_thread = threading.Thread(
+            target=self._listen_for_command,
+            daemon=True,
+            name="CommandListeningThread"
+        )
+        command_thread.start()
+    
+    def _listen_for_command(self):
+        """Listen for and process voice command after wake word detection"""
+        try:
+            # Flag to track listening state
+            self._listening_active = True
+            
+            # Use Whisper to transcribe command
+            transcription = listen_and_transcribe(
+                silence_threshold=500,  # Adjust based on your environment
+                silence_duration=2,     # Stop after 2 seconds of silence
+                model_size="base"       # Can be "tiny", "base", "small", etc.
+            )
+            
+            # Reset listening flag
+            self._listening_active = False
+            
+            # Remove status bubble
+            if hasattr(self.ui, 'remove_status_bubble'):
+                self.ui.remove_status_bubble()
+                
+            # Transition to PROCESSING state
+            self._transition_to(VoiceState.PROCESSING)
+            
+            # Log the transcription
+            logger.info(f"Command transcription: {transcription}")
+            
+            # Process the command if we got a valid transcription
+            if transcription and transcription.strip():
+                # Display transcription in UI
+                if hasattr(self.ui, 'display_status_bubble'):
+                    self.ui.display_status_bubble(f"Processing: {transcription}")
+                
+                # Process command by sending it to chat engine like a normal input
+                self._process_voice_command(transcription)
+            else:
+                # No valid transcription
+                logger.info("No valid command detected")
+                self._transition_to(VoiceState.LISTENING)
+                
+        except Exception as e:
+            logger.error(f"Error listening for command: {e}")
+            self._listening_active = False
+            self._transition_to(VoiceState.LISTENING)
+            
+            # Remove status bubble
+            if hasattr(self.ui, 'remove_status_bubble'):
+                self.ui.remove_status_bubble()
+    
+    def _process_voice_command(self, command):
+        """Process voice command by sending it to chat engine"""
+        try:
+            # Check if we have a valid chat engine
+            if not self.chat_engine:
+                logger.error("No chat engine available to process command")
+                self._transition_to(VoiceState.LISTENING)
+                return
+                
+            # Get current user data for context
+            user_prefix = self.chat_engine.get_user_prefix().rstrip(':')
+            
+            # Log the command
+            self.chat_engine.logger.log_message(f"{user_prefix}:", command)
+            
+            # Add to conversation history
+            self.chat_engine.add_to_conversation_history(f"{user_prefix}: {command}")
+            
+            # Update UI to show the command
+            if hasattr(self.ui, 'output_queue'):
+                self.ui.output_queue.put({"type": "user", "text": command})
+            
+            # Check for user commands
+            command_response = self.chat_engine.handle_user_commands(command)
+            if command_response:
+                # This was a command, display response
+                if hasattr(self.ui, 'output_queue'):
+                    self.ui.output_queue.put({"type": "jupiter", "text": command_response})
+                
+                # Add response to history
+                self.chat_engine.add_to_conversation_history(f"Jupiter: {command_response}")
+                self.chat_engine.logger.log_message("Jupiter:", command_response)
+                
+                # Speak the response
+                self._transition_to(VoiceState.SPEAKING)
+                self.speak(command_response)
+                
+                # Return to listening state
+                self._transition_to(VoiceState.LISTENING)
+                return
+                
+            # Process with LLM
+            llm_message = self.chat_engine.prepare_message_for_llm(command)
+            response = self.chat_engine.llm_client.generate_chat_response(
+                llm_message, 
+                temperature=self.chat_engine.config['llm']['chat_temperature']
+            )
+            
+            # Display response in UI
+            if hasattr(self.ui, 'output_queue'):
+                self.ui.output_queue.put({"type": "jupiter", "text": response})
+            
+            # Add response to history
+            self.chat_engine.add_to_conversation_history(f"Jupiter: {response}")
+            self.chat_engine.logger.log_message("Jupiter:", response)
+            
+            # Speak the response
+            self._transition_to(VoiceState.SPEAKING)
+            self.speak(response)
+            
+            # Return to listening state
+            self._transition_to(VoiceState.LISTENING)
+            
+        except Exception as e:
+            logger.error(f"Error processing voice command: {e}")
+            self._transition_to(VoiceState.LISTENING)
+        
+        finally:
+            # Remove status bubble
+            if hasattr(self.ui, 'remove_status_bubble'):
+                self.ui.remove_status_bubble()
+            
+            # Reset UI status
+            if hasattr(self.ui, 'set_status'):
+                self.ui.set_status("Ready", False)
+    
     def stop(self):
         """Stop the voice manager and clean up resources"""
         if not self.running:
             return
             
         self.running = False
+        
+        # Stop wake word detector
+        if self.wake_word_detector:
+            try:
+                self.wake_word_detector.stop()
+            except:
+                pass
+            self.wake_word_detector = None
         
         # Wait for control thread to exit
         if self.control_thread:
@@ -84,14 +336,29 @@ class VoiceManager:
         
         # Update enabled state
         self.enabled = enabled
-                
-        # Update UI with current state
-        if enabled:
+        
+        # Update wake word detector state
+        if enabled and self.detector_available:
+            if not self.wake_word_detector:
+                self._start_wake_word_detection()
+            self._transition_to(VoiceState.LISTENING)
             if hasattr(self.ui, 'set_status'):
-                self.ui.set_status("Voice active for speaking only", False)
+                self.ui.set_status("Listening for wake word", False)
         else:
+            # Stop wake word detector if running
+            if self.wake_word_detector:
+                try:
+                    self.wake_word_detector.stop()
+                except:
+                    pass
+                self.wake_word_detector = None
+                
+            self._transition_to(VoiceState.INACTIVE)
             if hasattr(self.ui, 'set_status'):
-                self.ui.set_status("Voice inactive", False)
+                if not enabled:
+                    self.ui.set_status("Voice inactive", False)
+                else:
+                    self.ui.set_status("Voice active for speaking only", False)
                 
         # Log state change
         logger.info(f"Voice features {'enabled' if enabled else 'disabled'}")
@@ -129,19 +396,41 @@ class VoiceManager:
             if command == "enable":
                 self.enabled = True
                 logger.info("Voice features enabled")
-                if hasattr(self.ui, 'set_status'):
-                    self.ui.set_status("Voice active for speaking only", False)
+                
+                # Start wake word detector if available
+                if self.detector_available:
+                    if not self.wake_word_detector:
+                        self._start_wake_word_detection()
+                    self._transition_to(VoiceState.LISTENING)
+                    if hasattr(self.ui, 'set_status'):
+                        self.ui.set_status("Listening for wake word", False)
+                else:
+                    if hasattr(self.ui, 'set_status'):
+                        self.ui.set_status("Voice active for speaking only", False)
                 
             elif command == "disable":
                 self.enabled = False
                 logger.info("Voice features disabled")
+                
+                # Stop wake word detector if running
+                if self.wake_word_detector:
+                    try:
+                        self.wake_word_detector.stop()
+                    except:
+                        pass
+                    self.wake_word_detector = None
+                
+                self._transition_to(VoiceState.INACTIVE)
                 if hasattr(self.ui, 'set_status'):
                     self.ui.set_status("Voice inactive", False)
                 
             elif command == "done_speaking":
-                # Transition back to inactive state
+                # Transition back to listening state if wake word is active
                 if self._get_state() == VoiceState.SPEAKING:
-                    self._transition_to(VoiceState.INACTIVE)
+                    if self.enabled and self.wake_word_detector:
+                        self._transition_to(VoiceState.LISTENING)
+                    else:
+                        self._transition_to(VoiceState.INACTIVE)
                 
             # Mark command as processed
             self.command_queue.task_done()
@@ -162,13 +451,22 @@ class VoiceManager:
             # Speak using Piper TTS
             llm_speak(text)
             
-            # Return to inactive state
-            self._transition_to(VoiceState.INACTIVE)
+            # Return to appropriate state based on wake word detector status
+            if self.enabled and self.wake_word_detector:
+                self._transition_to(VoiceState.LISTENING)
+            else:
+                self._transition_to(VoiceState.INACTIVE)
             
             return True
         except Exception as e:
             logger.error(f"Error in TTS: {e}")
-            self._transition_to(VoiceState.INACTIVE)
+            
+            # Return to appropriate state based on wake word detector status
+            if self.enabled and self.wake_word_detector:
+                self._transition_to(VoiceState.LISTENING)
+            else:
+                self._transition_to(VoiceState.INACTIVE)
+                
             return False
         
     def _get_state(self):
@@ -204,6 +502,12 @@ class VoiceManager:
                         self.ui.set_status("Voice active for speaking only", False)
                     else:
                         self.ui.set_status("Voice inactive", False)
+                elif current_state == VoiceState.LISTENING:
+                    self.ui.set_status("Listening for wake word", False)
+                elif current_state == VoiceState.FOCUSING:
+                    self.ui.set_status("Listening for command", True)
+                elif current_state == VoiceState.PROCESSING:
+                    self.ui.set_status("Processing command", True)
                 elif current_state == VoiceState.SPEAKING:
                     self.ui.set_status("Speaking", True)
                     
