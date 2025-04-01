@@ -159,15 +159,7 @@ def main():
         )
         
         # Start in a separate thread
-        import threading
-        discord_thread = threading.Thread(target=discord_module.start, daemon=True)
-        discord_thread.start()
-        
-        time.sleep(2)  # Give Discord client time to connect
-        if discord_module.is_running():
-            print("✅ Discord connection successful")
-        else:
-            print("⚠️ Discord failed to connect - check logs/discord.log for details")
+        discord_module.start()
 
     # Initialize wake word detector
     model_path = "models/jupiter-wake-word.pth"

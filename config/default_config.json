@@ -20,12 +20,12 @@
     "user_color": "magenta"
   },
   "discord": {
-    "enabled": false,
-    "token": "",
+    "enabled": true,
+    "token": "YOUR-ACTUAL-TOKEN-HERE",
     "allowed_servers": [],
     "allowed_channels": [],
     "observation_timeout": 300,
-    "name_variations": [ "jupiter", "jup" ],
+    "name_variations": ["jupiter", "jup"],
     "response_threshold": 0.7,
     "max_history_per_channel": 50,
     "user_mapping_file": "discord_users.json"
@@ -36,9 +36,7 @@
     "prompt_detail_level": "normal",
     "default_reminder_minutes": 15
   },
-  {
-    "voice": {
-      "enabled": true
-    }
+  "voice": {
+    "enabled": false
   }
 }
