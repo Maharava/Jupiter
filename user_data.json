@@ -4,32 +4,48 @@
             "name": "_vimy",
             "user_id": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9",
             "created_at": 1743481109.4138725,
-            "last_seen": 1743481109.4138725,
+            "last_seen": 1743497483.533045,
             "platforms": {
-                "discord": true
+                "discord": true,
+                "gui": true
             },
             "discord_id": "195791341739966464"
         },
-        "75cb3d82-1ab6-4531-9c66-933b580f10a9": {
-            "name": "Reece",
-            "user_id": "75cb3d82-1ab6-4531-9c66-933b580f10a9",
-            "created_at": 1743481155.0747323,
-            "last_seen": 1743481155.0747323,
+        "cca60676-b214-45d0-95bb-c12078579c40": {
+            "name": "kaiyabi",
+            "user_id": "cca60676-b214-45d0-95bb-c12078579c40",
+            "created_at": 1743487816.1036434,
+            "last_seen": 1743487816.1036434,
             "platforms": {
-                "gui": true
-            }
+                "discord": true
+            },
+            "discord_id": "255230202408468480"
+        },
+        "62194a62-16ee-44a9-94b4-a351f8a9a410": {
+            "name": "airocdsg",
+            "user_id": "62194a62-16ee-44a9-94b4-a351f8a9a410",
+            "created_at": 1743493392.6253586,
+            "last_seen": 1743493392.6253586,
+            "platforms": {
+                "discord": true
+            },
+            "discord_id": "157223648623591424"
         }
     },
     "name_map": {
         "_vimy": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9",
-        "reece": "75cb3d82-1ab6-4531-9c66-933b580f10a9"
+        "reece": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9",
+        "kaiyabi": "cca60676-b214-45d0-95bb-c12078579c40",
+        "airocdsg": "62194a62-16ee-44a9-94b4-a351f8a9a410"
     },
     "platform_map": {
         "gui": {
-            "reece": "75cb3d82-1ab6-4531-9c66-933b580f10a9"
+            "reece": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9"
         },
         "discord": {
-            "_vimy": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9"
+            "_vimy": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9",
+            "kaiyabi": "cca60676-b214-45d0-95bb-c12078579c40",
+            "airocdsg": "62194a62-16ee-44a9-94b4-a351f8a9a410"
         }
     },
     "metadata": {

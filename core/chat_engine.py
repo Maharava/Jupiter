@@ -9,7 +9,6 @@ from user_id_commands import handle_id_commands
 from utils.intent_recog import load_model, get_intent
 from utils.voice_cmd import intent_functions
 from utils.text_processing import count_tokens, truncate_to_token_limit
-from utils.piper import llm_speak
 from utils.calendar.prompt_enhancer import enhance_prompt
 from utils.calendar import process_calendar_command
 from utils.voice_manager import VoiceManager, VoiceState
@@ -81,11 +80,16 @@ class ChatEngine:
         return None
     
     def _speak_response(self, text):
-        """Convert text to speech using Piper with error handling"""
-        try:
-            llm_speak(text)
-        except Exception as e:
-            logger.error(f"Error in text-to-speech: {e}")
+        """Convert text to speech with proper state management"""
+        if self.voice_manager and self.voice_manager.enabled:
+            # Use voice manager if available - with proper state transitions
+            self.voice_manager.speak(text)
+        else:
+            # Direct fallback only if voice manager unavailable
+            try:
+                llm_speak(text)
+            except Exception as e:
+                logger.error(f"Error in text-to-speech: {e}")
     
     def add_to_conversation_history(self, message):
         """Add a message to conversation history with size management"""
@@ -261,103 +265,130 @@ class ChatEngine:
     
     def handle_user_commands(self, user_input):
         """Handle user commands with voice system integration"""
-        # Add platform tracking for the ChatEngine
+        # Track platform (unchanged)
         self.current_platform = "gui"
         if hasattr(self.ui, 'is_terminal') and self.ui.is_terminal:
             self.current_platform = "terminal"
+            
+        # Command mapping for cleaner handling
+        command_handlers = {
+            '/voice': self._handle_voice_command,
+            '/name': self._handle_name_command,
+            '/memory': self._handle_memory_command,
+            '/calendar': self._handle_calendar_command,
+            '/debug voice': self._handle_debug_voice_command,
+            '/help': self._handle_help_command
+        }
         
-        # Voice toggle command
-        if user_input.startswith('/voice'):
-            parts = user_input.split(None, 1)
-            if len(parts) > 1:
-                # Check for on/off parameter
-                param = parts[1].lower()
-                if param in ('on', 'enable', 'activate'):
-                    enabled = True
-                elif param in ('off', 'disable', 'deactivate'):
-                    enabled = False
-                else:
-                    return "Usage: /voice on|off - Enable or disable voice recognition"
-            else:
-                # Toggle current state
-                enabled = None
+        # Extract command and arguments
+        parts = user_input.split(None, 1)
+        command = parts[0].lower()
+        args = parts[1] if len(parts) > 1 else ""
+        
+        # Check for exact command match
+        if command in command_handlers:
+            return command_handlers[command](args)
+        
+        # Check for prefix matches
+        for cmd_prefix, handler in command_handlers.items():
+            if user_input.startswith(cmd_prefix):
+                return handler(args)
                 
-            # Toggle voice manager if available
-            if self.voice_manager:
-                enabled = self.voice_manager.toggle_voice(enabled)
-                return f"Voice recognition {'enabled' if enabled else 'disabled'}"
-            else:
-                if hasattr(self.ui, 'set_status'):
-                    self.ui.set_status("Voice system not available", False)
-                return "Voice recognition system is not available - check the log for details"
-        
-        elif user_input.startswith('/name '):
-            # Command to change username
-            new_name = user_input[6:].strip()
-            if new_name:
-                # Update user name
-                self.user_data_manager.current_user['name'] = new_name
-                self.user_data_manager.save_current_user()
-                response = f"I'll call you {new_name} from now on."
-                self._speak_response(response)
-                return response
-            else:
-                response = "Please provide a name after the /name command."
-                self._speak_response(response)
-                return response
-        
-        elif user_input == '/memory':
-            # Show what Jupiter remembers about the user
-            response = self.format_memory_display()
-            self._speak_response("Here's what I remember about you.")
-            return response
-        
-        # Handle ID-related commands
+        # Handle ID-related commands separately
         id_response = handle_id_commands(self, user_input)
         if id_response:
             return id_response
                 
-        elif user_input.startswith('/calendar'):
-            # Handle special calendar commands
-            # Check for preferences command
-            if user_input.lower() == '/calendar preferences' and hasattr(self.ui, 'root'):
-                try:
-                    from utils.calendar.preferences_ui import show_preferences_dialog
-                    # Show preferences dialog
-                    self.ui.root.after(0, lambda: show_preferences_dialog(self.ui.root))
-                    return "Opening calendar notification preferences..."
-                except (ImportError, AttributeError) as e:
-                    return "Calendar preferences are not available in this mode."
-                    
-            # Handle other calendar commands
-            try:
-                user_id = self.user_data_manager.current_user.get('user_id')
-                response = process_calendar_command(user_id, user_input)
-                self._speak_response("Here's your calendar information.")
-                return response
-            except Exception as e:
-                logger.error(f"Error processing calendar command: {e}")
-                return f"Error processing calendar command: {str(e)}"
-        
-        elif user_input.startswith('/debug') and user_input.lower().startswith('/debug voice'):
-            # Special command to debug voice system
-            if not self.voice_manager:
-                return "Voice system not initialized. Check log for errors."
-                
-            debug_info = [
-                "Voice System Debug Information:",
-                f"- Current state: {self.voice_manager.state.name if hasattr(self.voice_manager.state, 'name') else 'Unknown'}",
-                f"- Enabled: {self.voice_manager.enabled}",
-                f"- Model path: {self.voice_manager.model_path or 'Not found'}",
-                f"- Model exists: {os.path.exists(self.voice_manager.model_path) if self.voice_manager.model_path else False}",
-                f"- Audio capture: {'Active' if hasattr(self.voice_manager, 'audio_capture') and self.voice_manager.audio_capture else 'Not active'}"
-            ]
+        # Not a command
+        return None
+    
+    def _handle_voice_command(self, args):
+        """Handle voice command"""
+        parts = args.split(None, 1)
+        if len(parts) > 1:
+            # Check for on/off parameter
+            param = parts[1].lower()
+            if param in ('on', 'enable', 'activate'):
+                enabled = True
+            elif param in ('off', 'disable', 'deactivate'):
+                enabled = False
+            else:
+                return "Usage: /voice on|off - Enable or disable voice recognition"
+        else:
+            # Toggle current state
+            enabled = None
             
-            return "\n".join(debug_info)
+        # Toggle voice manager if available
+        if self.voice_manager:
+            enabled = self.voice_manager.toggle_voice(enabled)
+            return f"Voice recognition {'enabled' if enabled else 'disabled'}"
+        else:
+            if hasattr(self.ui, 'set_status'):
+                self.ui.set_status("Voice system not available", False)
+            return "Voice recognition system is not available - check the log for details"
+    
+    def _handle_name_command(self, args):
+        """Handle name command"""
+        new_name = args.strip()
+        if new_name:
+            # Update user name
+            self.user_data_manager.current_user['name'] = new_name
+            self.user_data_manager.save_current_user()
+            response = f"I'll call you {new_name} from now on."
+            self._speak_response(response)
+            return response
+        else:
+            response = "Please provide a name after the /name command."
+            self._speak_response(response)
+            return response
+    
+    def _handle_memory_command(self, args):
+        """Handle memory command"""
+        response = self.format_memory_display()
+        self._speak_response("Here's what I remember about you.")
+        return response
+    
+    def _handle_calendar_command(self, args):
+        """Handle calendar command"""
+        # Check for preferences command
+        if args.lower() == 'preferences' and hasattr(self.ui, 'root'):
+            try:
+                from utils.calendar.preferences_ui import show_preferences_dialog
+                # Show preferences dialog
+                self.ui.root.after(0, lambda: show_preferences_dialog(self.ui.root))
+                return "Opening calendar notification preferences..."
+            except (ImportError, AttributeError) as e:
+                return "Calendar preferences are not available in this mode."
+                
+        # Handle other calendar commands
+        try:
+            user_id = self.user_data_manager.current_user.get('user_id')
+            response = process_calendar_command(user_id, args)
+            self._speak_response("Here's your calendar information.")
+            return response
+        except Exception as e:
+            logger.error(f"Error processing calendar command: {e}")
+            return f"Error processing calendar command: {str(e)}"
+    
+    def _handle_debug_voice_command(self, args):
+        """Handle debug voice command"""
+        if not self.voice_manager:
+            return "Voice system not initialized. Check log for errors."
+            
+        debug_info = [
+            "Voice System Debug Information:",
+            f"- Current state: {self.voice_manager.state.name if hasattr(self.voice_manager.state, 'name') else 'Unknown'}",
+            f"- Enabled: {self.voice_manager.enabled}",
+            f"- Model path: {self.voice_manager.model_path or 'Not found'}",
+            f"- Model exists: {os.path.exists(self.voice_manager.model_path) if self.voice_manager.model_path else False}",
+            f"- Audio capture: {'Active' if hasattr(self.voice_manager, 'audio_capture') and self.voice_manager.audio_capture else 'Not active'}"
+        ]
         
-        elif user_input == '/help':
-            # Show available commands
-            help_text = """
+        return "\n".join(debug_info)
+    
+    def _handle_help_command(self, args):
+        """Handle help command"""
+        help_text = """
 Available commands:
 /voice on|off - Enable or disable voice recognition
 /name [new name] - Change your name
@@ -368,18 +399,15 @@ Available commands:
 /calendar preferences - Configure notification settings
 /debug voice - Show voice system diagnostic information
 /help - Show this help message
-            """
-            
-            # Add test mode info
-            if self.test_mode:
-                help_text += "\n⚠️ TEST MODE is active - running without LLM backend\n"
-            
-            self._speak_response("Here are the available commands.")
-            return help_text
+        """
         
-        # Not a command, return None to continue normal processing
-        return None    
-            
+        # Add test mode info
+        if self.test_mode:
+            help_text += "\n⚠️ TEST MODE is active - running without LLM backend\n"
+        
+        self._speak_response("Here are the available commands.")
+        return help_text
+    
     def __del__(self):
         """Clean up when the object is destroyed"""
         try:
@@ -532,158 +560,46 @@ Available commands:
     
     def run(self):
         """Run the chat interface"""
-        # Print welcome message
+        # Setup phase
         self.ui.print_welcome()
-        
-        # Set up button callbacks if using GUI
-        if hasattr(self.ui, 'set_restart_callback'):
-            self.ui.set_restart_callback(self.restart_chat)
-            self.ui.set_knowledge_callback(self.show_knowledge)
-        
-        # Show processing status if GUI is used
-        if hasattr(self.ui, 'set_status'):
-            if self.test_mode:
-                self.ui.set_status("TEST MODE - Initializing...", True)
-            else:
-                self.ui.set_status("Processing logs...", True)
-            
-        # Handle initial greeting and user identification
+        self._setup_ui_callbacks()
+        self._update_ui_status("Initializing...", True)
         self.handle_initial_greeting()
-        
-        # Print exit instructions
         self.ui.print_exit_instructions()
-        
-        # Reset status
-        if hasattr(self.ui, 'set_status'):
-            if self.test_mode:
-                self.ui.set_status("TEST MODE - Ready")
-            else:
-                self.ui.set_status("Ready")
-        
-        # Start voice manager if available
-        if self.voice_manager and not self.test_mode:
-            # Setup UI feedback
-            if hasattr(self.ui, 'setup_voice_indicator'):
-                # Set UI callback for state updates before starting
-                self.voice_manager.set_ui_callback(self.ui.update_voice_state)
-                
-                # Set up indicator with toggle callback
-                self.ui.setup_voice_indicator(
-                    lambda: self.voice_manager.toggle_voice()
-                )
-            
-            # Start the voice manager
-            self.voice_manager.start()
-        elif hasattr(self.ui, 'update_voice_state'):
-            # Update voice indicator to show it's permanently inactive
-            self.ui.update_voice_state(VoiceState.INACTIVE)
+        self._update_ui_status("Ready")
+        self._initialize_voice_features()
         
         # Main chat loop
         while True:
             # Get user input
             user_prefix = self.get_user_prefix()
-            user_input = self.ui.get_user_input(user_prefix[:-1])  # Remove colon from prefix
+            user_input = self.ui.get_user_input(user_prefix[:-1])
             
-            # Check for exit command
+            # Check for exit
             if self.ui.handle_exit_command(user_input):
-                exit_message = "Ending chat session. Goodbye!"
-                self._speak_response(exit_message)
+                self._speak_response("Ending chat session. Goodbye!")
                 break
-            
-            # Check for specific keywords that might trigger intent recognition
-            intent_triggered = False
-            if self.intent_classifier and self.intent_vectorizer:
-                if any(keyword in user_input.lower() for keyword in ["what time", "current time", "tell me the time", "play music"]):
-                    predicted_intent = get_intent(user_input, self.intent_classifier, self.intent_vectorizer, threshold=0.65)
-                    
-                    if predicted_intent is not None and predicted_intent in intent_functions:
-                        # Get the function from the map
-                        command_func = intent_functions[predicted_intent]
-                        
-                        # For functions that need context
-                        if predicted_intent == "shut_down":
-                            core_prompt = self.load_system_prompt()
-                            context = self.format_user_information()
-                            response = command_func(core_prompt, context)
-                        else:
-                            response = command_func()
-                            
-                        # Display, speak, and log response
-                        self.ui.print_jupiter_message(response)
-                        self._speak_response(response)
-                        self.logger.log_message("Jupiter:", response)
-                        
-                        # Reset status if UI supports it
-                        if hasattr(self.ui, 'set_status'):
-                            if self.test_mode:
-                                self.ui.set_status("TEST MODE - Ready")
-                            else:
-                                self.ui.set_status("Ready")
-                                
-                        intent_triggered = True
                 
-            # If an intent was triggered, skip to next loop iteration
-            if intent_triggered:
+            # Log user input
+            self.logger.log_message(user_prefix, user_input)
+            
+            # Check for intent triggers
+            if self._process_intent(user_input):
                 continue
+                
+            # Update UI status
+            self._update_ui_status("Processing your request...", True)
             
-            # Set busy status
-            if hasattr(self.ui, 'set_status'):
-                status_text = "Processing your request..."
-                if self.test_mode:
-                    status_text = "TEST MODE - " + status_text
-                self.ui.set_status(status_text, True)
-            
-            # Check for user commands
+            # Check for commands
             command_response = self.handle_user_commands(user_input)
             if command_response:
                 self.ui.print_jupiter_message(command_response)
                 self.logger.log_message("Jupiter:", command_response)
-                
-                # Reset status
-                if hasattr(self.ui, 'set_status'):
-                    if self.test_mode:
-                        self.ui.set_status("TEST MODE - Ready")
-                    else:
-                        self.ui.set_status("Ready")
-                    
+                self._update_ui_status("Ready")
                 continue
-            
-            # Log user message
-            self.logger.log_message(user_prefix, user_input)
-            
-            # Add user input to history with memory management
-            self.add_to_conversation_history(f"{user_prefix} {user_input}")
-            
-            # Update status to show Jupiter is generating a response
-            if hasattr(self.ui, 'set_status'):
-                status_text = "Thinking..."
-                if self.test_mode:
-                    status_text = "TEST MODE - " + status_text
-                self.ui.set_status(status_text, True)
-            
-            # Prepare and send to LLM
-            llm_message = self.prepare_message_for_llm(user_input)
-            response = self.llm_client.generate_chat_response(
-                llm_message, 
-                temperature=self.config['llm']['chat_temperature']
-            )
-            
-            # Print and log response
-            self.ui.print_jupiter_message(response)
-            self.logger.log_message("Jupiter:", response)
-            
-            # Speak the response directly
-            self._speak_response(response)
-            
-            # Add response to history with memory management
-            self.add_to_conversation_history(f"Jupiter: {response}")
-            
-            # Reset status
-            if hasattr(self.ui, 'set_status'):
-                if self.test_mode:
-                    self.ui.set_status("TEST MODE - Ready")
-                else:
-                    self.ui.set_status("Ready")
+                
+            # Process normal input
+            self._process_and_respond(user_input, user_prefix)
     
     def handle_initial_greeting(self):
         """Handle initial greeting and user identification"""
@@ -743,4 +659,106 @@ Available commands:
                 greeting += " (TEST MODE ACTIVE)"
             
             self.ui.print_jupiter_message(greeting)
-            self._speak_response(f"Nice to meet you, {name}! How can I help you today.")
+            self._speak_response(f"Nice to meet you, {name}! How can I help you today?")
+    
+    def _process_and_respond(self, user_input, user_prefix):
+        """Process user input and generate response"""
+        # Add to history
+        self.add_to_conversation_history(f"{user_prefix} {user_input}")
+        
+        # Update UI status
+        self._update_ui_status("Thinking...", True)
+        
+        # Generate response
+        llm_message = self.prepare_message_for_llm(user_input)
+        response = self.llm_client.generate_chat_response(
+            llm_message, 
+            temperature=self.config['llm']['chat_temperature']
+        )
+        
+        # Output response
+        self.ui.print_jupiter_message(response)
+        self.logger.log_message("Jupiter:", response)
+        self._speak_response(response)
+        
+        # Add to history
+        self.add_to_conversation_history(f"Jupiter: {response}")
+        
+        # Reset UI status
+        self._update_ui_status("Ready")
+        
+        return response
+    
+    def _update_ui_status(self, message, busy=False):
+        """Update UI status with test mode awareness"""
+        if hasattr(self.ui, 'set_status'):
+            status_text = message
+            if self.test_mode:
+                status_text = f"TEST MODE - {message}"
+            self.ui.set_status(status_text, busy)
+    
+    def _process_intent(self, user_input):
+        """Process input for intent recognition, returns True if handled"""
+        if not (self.intent_classifier and self.intent_vectorizer):
+            return False
+            
+        # Check for intent keywords
+        intent_keywords = ["what time", "current time", "tell me the time", "play music"]
+        if not any(keyword in user_input.lower() for keyword in intent_keywords):
+            return False
+            
+        # Get predicted intent
+        predicted_intent = get_intent(
+            user_input, 
+            self.intent_classifier, 
+            self.intent_vectorizer, 
+            threshold=0.65
+        )
+        
+        # Check if we have a handler
+        if predicted_intent is None or predicted_intent not in intent_functions:
+            return False
+            
+        # Execute intent function
+        command_func = intent_functions[predicted_intent]
+        
+        # Handle special cases
+        if predicted_intent == "shut_down":
+            core_prompt = self.load_system_prompt()
+            context = self.format_user_information()
+            response = command_func(core_prompt, context)
+        else:
+            response = command_func()
+            
+        # Output response
+        self.ui.print_jupiter_message(response)
+        self._speak_response(response)
+        self.logger.log_message("Jupiter:", response)
+        self._update_ui_status("Ready")
+        
+        return True
+
+    def _setup_ui_callbacks(self):
+        """Set up UI callbacks for voice features"""
+        # Register the UI callback for voice state changes
+        if hasattr(self, 'voice_manager') and self.voice_manager:
+            self.voice_manager.set_ui_callback(
+                lambda state: self.ui.update_voice_state(state) if hasattr(self.ui, 'update_voice_state') else None
+            )
+
+    def _initialize_voice_features(self):
+        """Initialize and start voice features if available"""
+        if hasattr(self, 'voice_manager') and self.voice_manager:
+            try:
+                # Start the voice manager if it exists and isn't already running
+                if not self.voice_manager.running:
+                    self.voice_manager.start()
+                
+                # Update UI if needed
+                if hasattr(self.ui, 'set_status') and self.voice_manager.enabled:
+                    if self.voice_manager.detector_available:
+                        self.ui.set_status("Listening for wake word", False)
+                    else:
+                        self.ui.set_status("Voice active for speaking only", False)
+            except Exception as e:
+                logger.error(f"Error initializing voice features: {e}")

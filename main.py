@@ -173,7 +173,7 @@ def main():
 
     # Run chat interface
     try:
-        logger.info("Listening for wake word... Press Ctrl+C to stop.")
+        print("Listening for wake word... Press Ctrl+C to stop.")
         while True:
             if detector.is_detected():
                 print("Wakeword detected!")

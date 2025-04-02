@@ -2,7 +2,6 @@ import subprocess
 import os
 import tempfile
 import logging
-from utils.path_helper import resolve_path
 
 # Set up logging
 logger = logging.getLogger("jupiter.tts")

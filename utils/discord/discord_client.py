@@ -2,7 +2,12 @@ import discord
 import asyncio
 import logging
 import time
+import json
 from typing import Dict, Any, List, Optional
+from utils.commands.discord_adapter import handle_discord_command
+# Important: Add this import to ensure commands are registered
+import utils.commands.command_core
+from discord import app_commands
 
 class JupiterDiscordClient:
     """Discord client for Jupiter - handles connection and message processing"""
@@ -26,6 +31,7 @@ class JupiterDiscordClient:
         intents = discord.Intents.default()
         intents.message_content = True
         self.client = discord.Client(intents=intents)
+        self.tree = app_commands.CommandTree(self.client)
         
         # Channel monitoring state - {channel_id: expiry_timestamp}
         self.active_channels = {}
@@ -33,8 +39,73 @@ class JupiterDiscordClient:
         # Setup event handlers
         self.setup_event_handlers()
         
+        # Register slash commands
+        self._register_slash_commands()
+        
         # Running state
         self.is_running = False
+        
+    def _register_slash_commands(self):
+        """Register slash commands with Discord"""
+        # Import necessary modules
+        from utils.commands.registry import registry
+        import discord
+        
+        # Register ID command
+        @self.tree.command(name="id", description="Display your Jupiter ID information")
+        async def id_command(interaction: discord.Interaction):
+            cmd = registry.get("id")
+            ctx = {
+                "platform": "discord",
+                "user": self._get_jupiter_user(interaction.user),
+                "user_manager": self.user_data_manager,
+                "interaction": interaction,
+                "client": self
+            }
+            response = cmd.handler(ctx)
+            await interaction.response.send_message(response)
+        
+        # Register help command
+        @self.tree.command(name="help", description="Show available commands")
+        async def help_command(interaction: discord.Interaction):
+            cmd = registry.get("help")
+            ctx = {
+                "platform": "discord",
+                "user": self._get_jupiter_user(interaction.user),
+                "user_manager": self.user_data_manager,
+                "interaction": interaction,
+                "client": self
+            }
+            response = cmd.handler(ctx)
+            await interaction.response.send_message(response)
+        
+        # Register deaf command
+        @self.tree.command(name="deaf", description="Make Jupiter stop listening in the current channel")
+        async def deaf_command(interaction: discord.Interaction):
+            cmd = registry.get("deaf")
+            ctx = {
+                "platform": "discord",
+                "user": self._get_jupiter_user(interaction.user),
+                "user_manager": self.user_data_manager,
+                "interaction": interaction,
+                "client": self
+            }
+            response = cmd.handler(ctx)
+            await interaction.response.send_message(response)
+        
+        # Register listen command
+        @self.tree.command(name="listen", description="Make Jupiter start listening in the current channel again")
+        async def listen_command(interaction: discord.Interaction):
+            cmd = registry.get("listen")
+            ctx = {
+                "platform": "discord",
+                "user": self._get_jupiter_user(interaction.user),
+                "user_manager": self.user_data_manager,
+                "interaction": interaction,
+                "client": self
+            }
+            response = cmd.handler(ctx)
+            await interaction.response.send_message(response)
         
     def setup_event_handlers(self):
         """Set up Discord event handlers"""
@@ -50,6 +121,10 @@ class JupiterDiscordClient:
             
             # Start periodic status update task
             self.client.loop.create_task(self._periodic_status_updates())
+            
+            # Sync slash commands with Discord
+            await self.tree.sync()
+            self.logger.info("Synced slash commands with Discord")
         
         @self.client.event
         async def on_message(message):
@@ -72,121 +147,20 @@ class JupiterDiscordClient:
             self.logger.error(f"Discord error in {event}")
             
     async def handle_command(self, message):
-        """Handle Discord commands"""
-        # Split the message into command and arguments
-        parts = message.content.split(None, 1)
-        command = parts[0].lower()
-        args = parts[1] if len(parts) > 1 else ""
+        """Handle Discord commands using the common registry"""
+        # Check if it's a command
+        if not message.content.startswith('/'):
+            return False
+            
+        # Use the adapter
+        handled = await handle_discord_command(self, message)
         
-        # Handle ID command
-        if command == '/id':
-            await self.cmd_show_id(message)
-            
-        # Handle link command
-        elif command == '/link':
-            await self.cmd_link_identity(message, args)
-            
-        # Handle help command
-        elif command == '/help':
-            await self.cmd_show_help(message)
-            
-        # Unknown command
-        else:
-            # Forward unknown commands to Jupiter
+        # If not handled by registry, process as a regular message
+        if not handled:
             await self.process_message(message)
-            
-    async def cmd_show_id(self, message):
-        """Show user's Jupiter ID information"""
-        # Get Jupiter user data
-        user = self._get_jupiter_user(message.author)
         
-        if not user or 'user_id' not in user:
-            await message.channel.send("You don't have a Jupiter ID yet. Try chatting with me first!")
-            return
+        return True
             
-        # Format user information
-        user_id = user.get('user_id', 'Unknown')
-        name = user.get('name', message.author.name)
-        platforms = user.get('platforms', {})
-        platform_list = [p for p, enabled in platforms.items() if enabled]
-        platform_str = ", ".join(platform_list) if platform_list else "discord only"
-        
-        # Create response
-        response = f"""
-**Your Jupiter ID Information**
-ID: `{user_id}`
-Name: {name}
-Platforms: {platform_str}
-
-This ID lets Jupiter recognize you across different platforms.
-Use `/link [platform] [username]` to connect with other platforms.
-"""
-        await message.channel.send(response)
-        
-    async def cmd_link_identity(self, message, args):
-        """Link user identity across platforms"""
-        if not args:
-            await message.channel.send(
-                "Usage: `/link [platform] [username]`\n"
-                "Example: `/link gui JohnDoe`\n\n"
-                "Available platforms: gui, terminal"
-            )
-            return
-            
-        # Parse arguments
-        parts = args.split(None, 1)
-        if len(parts) < 2:
-            await message.channel.send("Please specify both platform and username.")
-            return
-            
-        platform, username = parts
-        
-        # Validate platform
-        if platform.lower() not in ["gui", "terminal"]:
-            await message.channel.send(f"Unknown platform '{platform}'. Supported platforms: gui, terminal")
-            return
-            
-        # Get Discord user data
-        discord_user = self._get_jupiter_user(message.author)
-        
-        if not discord_user or 'user_id' not in discord_user:
-            await message.channel.send("You don't have a Jupiter ID yet. Try chatting with me first!")
-            return
-            
-        # Attempt linking
-        try:
-            source_platform = "discord"
-            source_name = message.author.name
-            target_platform = platform.lower()
-            target_name = username
-            
-            success, result_message = self.user_data_manager.link_platform_identities(
-                source_platform, source_name,
-                target_platform, target_name
-            )
-            
-            if success:
-                await message.channel.send(f"✅ Success! {result_message}")
-            else:
-                await message.channel.send(f"❌ Linking failed: {result_message}")
-                
-        except Exception as e:
-            self.logger.error(f"Error linking identities: {str(e)}", exc_info=True)
-            await message.channel.send("An error occurred while linking identities. Please try again later.")
-            
-    async def cmd_show_help(self, message):
-        """Show help information"""
-        help_text = """
-**Jupiter Discord Commands**
-
-`/id` - Show your Jupiter ID information
-`/link [platform] [username]` - Link your identity with another platform
-`/help` - Show this help message
-
-You can chat with me in DMs anytime. In channels, just mention "Jupiter" and I'll respond!
-"""
-        await message.channel.send(help_text)
-    
     async def process_message(self, message):
         """Process incoming Discord message"""
         try:
@@ -204,8 +178,8 @@ You can chat with me in DMs anytime. In channels, just mention "Jupiter" and I'l
             
             # Set typing indicator for better UX
             async with message.channel.typing():
-                # Generate response through Jupiter's chat engine
-                response = self._generate_response(jupiter_user, message.content)
+                # Use the async version instead
+                response = await self._generate_response_async(jupiter_user, message.content)
                 
                 # Log Jupiter's response
                 self.logger.info(f"[{channel_type}] Jupiter: {response[:100]}... ({channel_info})")
@@ -219,14 +193,22 @@ You can chat with me in DMs anytime. In channels, just mention "Jupiter" and I'l
     
     def _should_process_message(self, message) -> bool:
         """Determine if we should process this message"""
-        # Always process DMs
+        # Always process DMs and make the channel active
         if isinstance(message.channel, discord.DMChannel):
+            # Add DM channel to active channels
+            timeout = self.config.get("observation_timeout", 300)
+            self.active_channels[message.channel.id] = time.time() + timeout
+            self.logger.info(f"Activated DM channel {message.channel.id} for {timeout} seconds")
+            
+            # Update Discord status to reflect active listening
+            asyncio.create_task(self._update_discord_status())
             return True
             
+        # Rest of the method remains unchanged
         # Check if in allowed servers/channels
         if not self._is_allowed(message):
             return False
-            
+        
         # Check if message is in an active channel
         channel_id = message.channel.id
         is_active_channel = (channel_id in self.active_channels and 
@@ -250,7 +232,12 @@ You can chat with me in DMs anytime. In channels, just mention "Jupiter" and I'l
         """Check if message is from an allowed server and channel"""
         allowed_servers = self.config.get("allowed_servers", [])
         allowed_channels = self.config.get("allowed_channels", [])
+        blacklisted_channels = self.config.get("blacklisted_channels", [])
         
+        # Check blacklist first - these override any allows
+        if message.channel.id in blacklisted_channels:
+            return False
+            
         # If lists are empty, allow all
         if not allowed_servers and not allowed_channels:
             return True
@@ -318,6 +305,17 @@ You can chat with me in DMs anytime. In channels, just mention "Jupiter" and I'l
             # Restore original user
             self.chat_engine.user_data_manager.set_current_user(original_user)
     
+    async def _generate_response_async(self, jupiter_user, message_text) -> str:
+        """Generate a response from Jupiter's chat engine asynchronously"""
+        loop = asyncio.get_event_loop()
+        
+        # Run the synchronous function in a thread pool
+        return await loop.run_in_executor(
+            None,  # Use default executor
+            self._generate_response,  # The function to run
+            jupiter_user, message_text  # Arguments to the function
+        )
+
     async def _send_response(self, channel, response):
         """Send response, handling multiple chunks if needed"""
         try:
@@ -409,3 +407,36 @@ You can chat with me in DMs anytime. In channels, just mention "Jupiter" and I'l
             self.client.close(), self.client.loop
         )
         self.logger.info("Discord client stopped")
+
+    def _save_config(self):
+        """Save Discord-specific config changes back to disk"""
+        try:
+            # Load the full config from disk
+            config_path = "config/default_config.json"
+            with open(config_path, 'r', encoding='utf-8') as f:
+                full_config = json.load(f)
+            
+            # Update just the Discord-specific parts that can change
+            if "discord" not in full_config:
+                full_config["discord"] = {}
+                
+            # Update blacklisted channels
+            if hasattr(self.config, "blacklisted_channels"):
+                full_config["discord"]["blacklisted_channels"] = self.config.blacklisted_channels
+            elif isinstance(self.config, dict) and "blacklisted_channels" in self.config:
+                full_config["discord"]["blacklisted_channels"] = self.config["blacklisted_channels"]
+            
+            # Write back to disk with proper formatting
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(full_config, f, indent=2)
+                
+            self.logger.info(f"Updated Discord configuration saved to {config_path}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error saving Discord configuration: {e}", exc_info=True)
+            return False
+
+    async def _save_config_async(self):
+        """Save config asynchronously"""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._save_config)
