@@ -44,6 +44,12 @@ class JupiterDiscordClient:
             """Handle Discord client ready event"""
             self.logger.info(f"Logged in as {self.client.user}")
             self.is_running = True
+            
+            # Start initial status as Away
+            await self.client.change_presence(status=discord.Status.idle)
+            
+            # Start periodic status update task
+            self.client.loop.create_task(self._periodic_status_updates())
         
         @self.client.event
         async def on_message(message):
@@ -234,6 +240,9 @@ You can chat with me in DMs anytime. In channels, just mention "Jupiter" and I'l
             timeout = self.config.get("observation_timeout", 300)  # Default 5 minutes
             self.active_channels[channel_id] = time.time() + timeout
             self.logger.info(f"Activated channel {channel_id} for {timeout} seconds")
+            
+            # Update Discord status to reflect active listening
+            asyncio.create_task(self._update_discord_status())
         
         return is_active_channel or mentions_jupiter
     
@@ -347,6 +356,30 @@ You can chat with me in DMs anytime. In channels, just mention "Jupiter" and I'l
             
         return chunks
     
+    async def _update_discord_status(self):
+        """Update Discord status based on active channels"""
+        # Check if any channels are active
+        current_time = time.time()
+        active_channels = {ch_id: expiry for ch_id, expiry in self.active_channels.items() 
+                          if expiry > current_time}
+        
+        # Update the stored active channels (removes expired ones)
+        self.active_channels = active_channels
+        
+        # Set status based on whether any channels are active
+        if active_channels:
+            await self.client.change_presence(status=discord.Status.online)
+            self.logger.debug("Set Discord status to Online")
+        else:
+            await self.client.change_presence(status=discord.Status.idle)
+            self.logger.debug("Set Discord status to Away")
+    
+    async def _periodic_status_updates(self):
+        """Periodically update status to handle expired channels"""
+        while self.is_running:
+            await self._update_discord_status()
+            await asyncio.sleep(60)  # Check every minute
+    
     def start(self):
         """Start the Discord client"""
         try:
@@ -363,6 +396,13 @@ You can chat with me in DMs anytime. In channels, just mention "Jupiter" and I'l
     def stop(self):
         """Stop the Discord client"""
         self.is_running = False
+        
+        # Set status to invisible before closing
+        if self.client.loop and self.client.is_ready():
+            asyncio.run_coroutine_threadsafe(
+                self.client.change_presence(status=discord.Status.invisible),
+                self.client.loop
+            )
         
         # Close Discord client
         asyncio.run_coroutine_threadsafe(

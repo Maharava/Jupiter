@@ -1,0 +1,39 @@
+{
+    "users": {
+        "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9": {
+            "name": "_vimy",
+            "user_id": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9",
+            "created_at": 1743481109.4138725,
+            "last_seen": 1743481109.4138725,
+            "platforms": {
+                "discord": true
+            },
+            "discord_id": "195791341739966464"
+        },
+        "75cb3d82-1ab6-4531-9c66-933b580f10a9": {
+            "name": "Reece",
+            "user_id": "75cb3d82-1ab6-4531-9c66-933b580f10a9",
+            "created_at": 1743481155.0747323,
+            "last_seen": 1743481155.0747323,
+            "platforms": {
+                "gui": true
+            }
+        }
+    },
+    "name_map": {
+        "_vimy": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9",
+        "reece": "75cb3d82-1ab6-4531-9c66-933b580f10a9"
+    },
+    "platform_map": {
+        "gui": {
+            "reece": "75cb3d82-1ab6-4531-9c66-933b580f10a9"
+        },
+        "discord": {
+            "_vimy": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9"
+        }
+    },
+    "metadata": {
+        "version": 2,
+        "last_cleanup": 1743481049.9677083
+    }
+}

@@ -19,13 +19,25 @@ except ImportError as e:
 # Set up logging
 logger = logging.getLogger("jupiter.voice")
 
+# Reduce states by combining FOCUSING and PROCESSING
 class VoiceState(Enum):
-    """States for the voice interaction state machine"""
-    INACTIVE = auto()  # Voice features disabled
-    LISTENING = auto()  # Listening for wake word
-    FOCUSING = auto()   # Wake word detected, listening for command
-    PROCESSING = auto() # Processing command
-    SPEAKING = auto()   # Jupiter is speaking
+    """Simplified states for voice interaction"""
+    INACTIVE = auto()   # Voice disabled
+    LISTENING = auto()  # Waiting for wake word
+    ACTIVE = auto()     # Processing user input (combines focusing and processing)
+    SPEAKING = auto()   # Speaking response
+
+def error_handler(func):
+    """Decorator to standardize error handling"""
+    def wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in {func.__name__}: {e}")
+            # Return to stable state
+            self._transition_to(VoiceState.LISTENING if self.enabled else VoiceState.INACTIVE)
+            return None
+    return wrapper
 
 class VoiceManager:
     """Voice manager for Jupiter - handles TTS, STT, and wake word detection"""
@@ -60,6 +72,10 @@ class VoiceManager:
         
         # Flag for active listening
         self._listening_active = False
+
+        # Initialize task queue and worker thread
+        self.task_queue = queue.Queue()
+        self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
     
     def set_ui_callback(self, callback):
         """Set callback function for UI updates"""
@@ -80,6 +96,9 @@ class VoiceManager:
             name="VoiceManagerThread"
         )
         self.control_thread.start()
+
+        # Start the worker thread
+        self.worker_thread.start()
         
         # Start wake word detection if enabled and available
         if self.enabled and self.detector_available:
@@ -161,24 +180,19 @@ class VoiceManager:
         
         # Check if we're already processing a command
         current_state = self._get_state()
-        if current_state in [VoiceState.FOCUSING, VoiceState.PROCESSING, VoiceState.SPEAKING]:
+        if current_state in [VoiceState.ACTIVE, VoiceState.SPEAKING]:
             logger.info(f"Ignoring wake word detection while in {current_state.name} state")
             return
         
-        # Transition to FOCUSING state
-        self._transition_to(VoiceState.FOCUSING)
+        # Transition to ACTIVE state
+        self._transition_to(VoiceState.ACTIVE)
         
         # Display status bubble in UI
         if hasattr(self.ui, 'display_status_bubble'):
             self.ui.display_status_bubble("Listening for command...")
             
         # Start listening for command in a separate thread to not block wake word detection
-        command_thread = threading.Thread(
-            target=self._listen_for_command,
-            daemon=True,
-            name="CommandListeningThread"
-        )
-        command_thread.start()
+        self.task_queue.put((self._listen_for_command, [], {}))
     
     def _listen_for_command(self):
         """Listen for and process voice command after wake word detection"""
@@ -200,8 +214,8 @@ class VoiceManager:
             if hasattr(self.ui, 'remove_status_bubble'):
                 self.ui.remove_status_bubble()
                 
-            # Transition to PROCESSING state
-            self._transition_to(VoiceState.PROCESSING)
+            # Transition to ACTIVE state
+            self._transition_to(VoiceState.ACTIVE)
             
             # Log the transcription
             logger.info(f"Command transcription: {transcription}")
@@ -486,30 +500,33 @@ class VoiceManager:
         # Update UI
         self._update_ui()
         
-    def _update_ui(self):
-        """Update UI based on current state"""
-        try:
-            current_state = self._get_state()
-            
-            # Call the UI callback if available
-            if self.update_ui_callback and callable(self.update_ui_callback):
-                self.update_ui_callback(current_state)
-                
-            # Update status in GUI if available
-            if hasattr(self.ui, 'set_status'):
-                if current_state == VoiceState.INACTIVE:
-                    if self.enabled:
-                        self.ui.set_status("Voice active for speaking only", False)
-                    else:
-                        self.ui.set_status("Voice inactive", False)
-                elif current_state == VoiceState.LISTENING:
-                    self.ui.set_status("Listening for wake word", False)
-                elif current_state == VoiceState.FOCUSING:
-                    self.ui.set_status("Listening for command", True)
-                elif current_state == VoiceState.PROCESSING:
-                    self.ui.set_status("Processing command", True)
-                elif current_state == VoiceState.SPEAKING:
-                    self.ui.set_status("Speaking", True)
-                    
-        except Exception as e:
-            logger.error(f"Error updating UI: {e}")
+    def _update_ui(self, message=None, busy=False, bubble_text=None):
+        """Centralized UI update method"""
+        current_state = self._get_state()
+        
+        # Update callback if registered
+        if self.update_ui_callback:
+            self.update_ui_callback(current_state)
+        
+        # Update status text if provided
+        if message and hasattr(self.ui, 'set_status'):
+            self.ui.set_status(message, busy)
+        
+        # Update status bubble if provided
+        if bubble_text:
+            if hasattr(self.ui, 'display_status_bubble'):
+                self.ui.display_status_bubble(bubble_text)
+        elif bubble_text is None and hasattr(self.ui, 'remove_status_bubble'):
+            self.ui.remove_status_bubble()
+
+    def _worker_loop(self):
+        """Single worker thread to handle all async tasks"""
+        while self.running:
+            try:
+                task_func, args, kwargs = self.task_queue.get(timeout=0.1)
+                task_func(*args, **kwargs)
+                self.task_queue.task_done()
+            except queue.Empty:
+                pass
+            except Exception as e:
+                logger.error(f"Task error: {e}")
