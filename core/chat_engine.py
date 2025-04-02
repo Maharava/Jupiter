@@ -280,7 +280,6 @@ class ChatEngine:
             '/voice': self._handle_voice_command,
             '/name': self._handle_name_command,
             '/memory': self._handle_memory_command,
-            '/calendar': self._handle_calendar_command,
             '/debug voice': self._handle_debug_voice_command,
             '/help': self._handle_help_command
         }
@@ -353,16 +352,6 @@ class ChatEngine:
         self._speak_response("Here's what I remember about you.")
         return response
     
-        # Handle other calendar commands
-        try:
-            user_id = self.user_data_manager.current_user.get('user_id')
-            response = process_calendar_command(user_id, args)
-            self._speak_response("Here's your calendar information.")
-            return response
-        except Exception as e:
-            logger.error(f"Error processing calendar command: {e}")
-            return f"Error processing calendar command: {str(e)}"
-    
     def _handle_debug_voice_command(self, args):
         """Handle debug voice command"""
         if not self.voice_manager:
@@ -388,8 +377,6 @@ Available commands:
 /memory - Show what I remember about you
 /id - Show your Jupiter ID information
 /link [platform] [username] - Link your identity with another platform
-/calendar [subcommand] - Manage your calendar (try '/calendar help' for details)
-/calendar preferences - Configure notification settings
 /debug voice - Show voice system diagnostic information
 /help - Show this help message
         """
@@ -407,13 +394,6 @@ Available commands:
             # Clean up voice manager
             if hasattr(self, 'voice_manager') and self.voice_manager:
                 self.voice_manager.stop()
-            
-            # Shut down calendar notifications if enabled
-            try:
-                from utils.calendar import shutdown_calendar_daemon
-                shutdown_calendar_daemon()
-            except ImportError:
-                pass
         except:
             pass
             
