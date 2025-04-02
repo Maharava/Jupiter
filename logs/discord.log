@@ -309,3 +309,8 @@ Erect in form, an... (Direct Message)
 2025-04-02 21:10:44,518 - jupiter.discord - INFO - Saving active Discord DMs...
 2025-04-02 21:10:44,519 - jupiter.discord - INFO - Saved 0 active DM channels
 2025-04-02 21:10:44,519 - jupiter.discord - INFO - Discord client stopped
+2025-04-02 21:11:21,830 - jupiter.discord - INFO - Found 0 saved DM channels
+2025-04-02 21:11:21,831 - jupiter.discord - INFO - Starting Discord client
+2025-04-02 21:11:25,440 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-02 21:11:25,440 - jupiter.discord - INFO - Sent startup notifications to 0 users
+2025-04-02 21:11:25,862 - jupiter.discord - INFO - Synced slash commands with Discord
