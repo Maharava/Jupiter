@@ -970,3 +970,16 @@ class GUIInterface:
     def register_chat_engine(self, chat_engine):
         """Register chat engine for debugging access"""
         self._chat_engine = chat_engine
+
+    def set_ai_name(self, name):
+        """Set the AI assistant's name"""
+        self.ai_name = name
+        # Update any UI elements displaying the name
+        if hasattr(self, "title_label") and self.title_label:
+            self.title_label.config(text=f"{self.ai_name} Chat")
+
+    def set_ai_color(self, color):
+        """Set the AI assistant's color"""
+        self.jupiter_color = color
+        # Update color in existing UI elements if needed
+        self._update_ui_colors()

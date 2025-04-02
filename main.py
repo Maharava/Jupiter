@@ -146,44 +146,70 @@ def main():
             # For terminal mode, pass the terminal UI
             initialize_calendar_daemon(gui_root=None, terminal_ui=ui, enable_voice=True)
 
-    # Add Discord integration if enabled
-    if config.get('discord', {}).get('enabled', False):
-        from utils.discord import DiscordModule
-        
-        # Initialize Discord module
-        discord_module = DiscordModule(
-            chat_engine=chat_engine,
-            user_data_manager=user_data_manager,
-            logger=logger,
-            config=config.get('discord', {})
-        )
-        
-        # Start in a separate thread
-        discord_module.start()
-
-    # Initialize wake word detector
-    model_path = "models/jupiter-wake-word.pth"
-    detector = WakeWordDetector(model_path=model_path, device_index=0, threshold=0.85)
-    detector.start()
-
-    def on_wake_word_detected(confidence):
-        print(f"Wakeword detected! (confidence: {confidence:.4f})")
-
-    detector.register_detection_callback(on_wake_word_detected)
-
-    # Run chat interface
+    # Create wake word detector but don't start it yet
+    detector = None
+    discord_module = None
+    
     try:
-        print("Listening for wake word... Press Ctrl+C to stop.")
-        while True:
-            if detector.is_detected():
-                print("Wakeword detected!")
-                # Add any additional actions to be triggered on wake word detection here
-            time.sleep(0.1)  # Sleep to avoid busy-waiting
-    except KeyboardInterrupt:
-        logger.info("Stopped by user")
-    finally:
-        detector.stop()
+        # Initialize Discord if enabled
+        if config.get('discord', {}).get('enabled', False):
+            from utils.discord import DiscordModule
+            
+            discord_module = DiscordModule(
+                chat_engine=chat_engine,
+                user_data_manager=user_data_manager,
+                logger=logger,
+                config=config.get('discord', {})
+            )
+            discord_module.start()
+        
+        # Define wake word initialization function that runs after login
+        def initialize_wake_word():
+            nonlocal detector
+            if config.get('voice', {}).get('enabled', False):
+                try:
+                    # Get wake word from current persona
+                    from utils.config import get_current_persona
+                    persona = get_current_persona(config)
+                    wake_word = persona.get("wake_word", "jupiter")
+                    
+                    # Initialize wake word detector
+                    model_path = f"models/{wake_word}-wake-word.pth"
+                    # Fall back to default if model doesn't exist
+                    if not os.path.exists(model_path):
+                        model_path = "models/jupiter-wake-word.pth"
+                        logger.warning(f"Wake word model for '{wake_word}' not found, using default model")
+                        
+                    detector = WakeWordDetector(model_path=model_path, device_index=0, threshold=0.85)
+                    
+                    # Define a useful callback that actually interacts with the chat engine
+                    def on_wake_word_detected(confidence):
+                        print(f"\nWake word detected! (confidence: {confidence:.4f})")
+                        chat_engine.ui.prompt_for_input("How can I help you?")
+                    
+                    detector.register_detection_callback(on_wake_word_detected)
+                    detector.start()
+                    print("Listening for wake word... (Chat is still active)")
+                except Exception as e:
+                    print(f"Error initializing wake word: {e}")
+        
+        # Register the wake word initialization to happen after login
+        chat_engine.register_login_callback(initialize_wake_word)
+        
+        # Run the chat engine (this is blocking)
         chat_engine.run()
+        
+    finally:
+        # Ensure proper cleanup of resources
+        if discord_module:
+            try:
+                discord_module.stop()
+                logging.info("Discord client stopped")
+            except Exception as e:
+                logging.error(f"Error stopping Discord client: {e}")
+                
+        if detector:
+            detector.stop()
 
 if __name__ == "__main__":
     main()

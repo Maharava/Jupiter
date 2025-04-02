@@ -20,6 +20,12 @@ class TerminalInterface:
         
         # User prefix
         self.user_prefix = "User"
+        
+        # Add available colors
+        self.colors = {
+            "black", "red", "green", "yellow", "blue", 
+            "magenta", "cyan", "white", "purple", "orange"
+        }
     
     def print_jupiter_message(self, message):
         """Print a message from Jupiter with correct color"""
@@ -102,3 +108,22 @@ class TerminalInterface:
         """Setup voice indicator (not applicable for terminal)"""
         # No-op in terminal mode, added for compatibility
         pass
+
+    def prompt_for_input(self, prompt=None):
+        """Prompt the user for input, optionally with a custom prompt"""
+        if prompt:
+            print(f"\n{prompt}")
+        # Print the standard input prompt
+        print(f"{self.user_prefix}", end="", flush=True)
+
+    def set_ai_name(self, name):
+        """Set the AI assistant's name"""
+        self.ai_name = name
+        self.jupiter_prefix = f"{self.ai_name}: "
+
+    def set_ai_color(self, color):
+        """Set the AI assistant's color"""
+        if color in self.colors:
+            self.jupiter_color = color
+        else:
+            print(f"Warning: Color '{color}' not available, using default '{self.jupiter_color}'")

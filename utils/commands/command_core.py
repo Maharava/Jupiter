@@ -217,6 +217,50 @@ def listen_command(ctx, args=None):
     
     return f"I'll start monitoring #{channel_name} again."
 
+def persona_command(ctx, args=None):
+    """Change or display the current AI persona"""
+    client = ctx.get("client")
+    config = client.config
+    
+    # Get available personas
+    ai_config = config.get("ai", {})
+    personas = ai_config.get("personas", {})
+    current = ai_config.get("current_persona", "jupiter")
+    
+    # If no args, show current and available personas
+    if not args:
+        response = f"Current persona: **{current}**\n\nAvailable personas:\n"
+        for key, persona in personas.items():
+            response += f"- **{key}**: {persona['name']} ({persona['color']})\n"
+        return response
+    
+    # Try to change to requested persona
+    requested = args.strip().lower()
+    if requested in personas:
+        # Update current persona
+        if hasattr(config, "get"):
+            config["ai"]["current_persona"] = requested
+        else:
+            config.ai.current_persona = requested
+            
+        # Save changes
+        if hasattr(client, "_save_config"):
+            client._save_config()
+            
+        new_name = personas[requested]["name"]
+        return f"Changed persona to **{requested}** ({new_name}). This will take full effect on restart."
+    else:
+        return f"Unknown persona '{requested}'. Use '/persona' to see available options."
+
+# Register the command
+registry.register(Command(
+    name="persona",
+    handler=persona_command,
+    description="Change or view AI persona",
+    usage="/persona [name]",
+    platforms=["discord", "terminal", "gui"]
+))
+
 # Register commands
 registry.register(Command(
     name="id",

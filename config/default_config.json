@@ -1,4 +1,25 @@
 {
+  "ai": {
+    "current_persona": "europa",
+    "personas": {
+      "europa": {
+        "name": "Europa",
+        "color": "purple",
+        "wake_word": "europa",
+        "name_variations": [
+          "europa"
+        ]
+      },
+      "carpo": {
+        "name": "Carpo",
+        "color": "yellow",
+        "wake_word": "carpo",
+        "name_variations": [
+          "carpo"
+        ]
+      }
+    }
+  },
   "llm": {
     "provider": "ollama",
     "api_url": "http://localhost:11434",
@@ -25,10 +46,14 @@
     "allowed_servers": [],
     "allowed_channels": [],
     "observation_timeout": 300,
-    "name_variations": ["jupiter", "jup"],
+    "name_variations": [
+      "jupiter",
+      "jup"
+    ],
     "response_threshold": 0.7,
     "max_history_per_channel": 50,
-    "user_mapping_file": "discord_users.json"
+    "user_mapping_file": "discord_users.json",
+    "active_dms": {}
   },
   "calendar": {
     "enable_notifications": true,

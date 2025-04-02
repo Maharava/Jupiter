@@ -51,6 +51,21 @@ class ChatEngine:
         
         if self.test_mode:
             print(f"🧪 ChatEngine initialized in TEST MODE")
+        
+        # Get current persona
+        from utils.config import get_current_persona
+        self.persona = get_current_persona(config)
+        self.ai_name = self.persona["name"]
+        
+        # Update UI with persona
+        if hasattr(self.ui, "set_ai_name"):
+            self.ui.set_ai_name(self.ai_name)
+            
+        if hasattr(self.ui, "set_ai_color") and "color" in self.persona:
+            try:
+                self.ui.set_ai_color(self.persona["color"])
+            except Exception as e:
+                self.logger.warning(f"Could not set AI color: {e}")
     
     def _initialize_voice_manager(self):
         """Initialize simplified voice manager for TTS only"""
@@ -611,10 +626,10 @@ Available commands:
         if self.test_mode:
             test_mode_notice = " (TEST MODE - No LLM connection)"
         
-        # Ask for name
-        greeting = f"I'm Jupiter{test_mode_notice}, your AI assistant. Please enter your name. Please ONLY type your name in. Consider it a username."
+        # Ask for name - use persona name instead of hardcoded "Jupiter"
+        greeting = f"I'm {self.ai_name}{test_mode_notice}, your AI assistant. Please enter your name. Please ONLY type your name in. Consider it a username."
         self.ui.print_jupiter_message(greeting)
-        self._speak_response("I'm Jupiter, your AI assistant. Please enter your name.")
+        self._speak_response(f"I'm {self.ai_name}, your AI assistant. Please enter your name.")
         
         while True:
             name = self.ui.get_user_input()
@@ -762,3 +777,17 @@ Available commands:
                         self.ui.set_status("Voice active for speaking only", False)
             except Exception as e:
                 logger.error(f"Error initializing voice features: {e}")
+
+    def register_login_callback(self, callback):
+        """Register a function to call after successful login"""
+        self._login_callbacks = getattr(self, '_login_callbacks', [])
+        self._login_callbacks.append(callback)
+    
+    def _user_logged_in(self):
+        """Called when user successfully logs in"""
+        callbacks = getattr(self, '_login_callbacks', [])
+        for callback in callbacks:
+            try:
+                callback()
+            except Exception as e:
+                self.logger.error(f"Error in login callback: {e}")
