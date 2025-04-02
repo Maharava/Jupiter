@@ -40,6 +40,9 @@ class JupiterDiscordClient:
         # Channel monitoring state - {channel_id: expiry_timestamp}
         self.active_channels = {}
         
+        # NEW: Track DM channels separately (won't expire with timeout)
+        self.dm_channels = set()
+        
         # Setup event handlers
         self.setup_event_handlers()
         
@@ -49,6 +52,9 @@ class JupiterDiscordClient:
         # Running state
         self.is_running = False
 
+        # NEW: Load any previously saved DMs
+        self._load_active_dms()
+        
         # Load blacklisted channels from main config if available
         if "blacklisted_channels" in chat_engine.config.get("discord", {}):
             if isinstance(self.config, dict):
@@ -214,9 +220,13 @@ class JupiterDiscordClient:
         """Determine if we should process this message"""
         # Always process DMs and make the channel active
         if isinstance(message.channel, discord.DMChannel):
-            # Add DM channel to active channels
+            # Add DM channel to active channels for immediate processing
             timeout = self.config.get("observation_timeout", 300)
             self.active_channels[message.channel.id] = time.time() + timeout
+            
+            # NEW: Also track as persistent DM channel
+            self.dm_channels.add(message.channel.id)
+            
             self.logger.info(f"Activated DM channel {message.channel.id} for {timeout} seconds")
             
             # Update Discord status to reflect active listening
@@ -422,14 +432,21 @@ class JupiterDiscordClient:
         """Stop the Discord client"""
         self.is_running = False
         
-        try:
-            # Save active DMs before shutting down
-            self.logger.info("Stopping Discord client, saving active DMs...")
-            self._save_active_dms()
-        except Exception as e:
-            self.logger.error(f"Error while saving active DMs: {e}", exc_info=True)
+        # Save active DMs before shutting down
+        self._save_active_dms()
         
-        # Rest of shutdown code...
+        # Set status to invisible before closing
+        if self.client.loop and self.client.is_ready():
+            asyncio.run_coroutine_threadsafe(
+                self.client.change_presence(status=discord.Status.invisible),
+                self.client.loop
+            )
+        
+        # Close Discord client
+        asyncio.run_coroutine_threadsafe(
+            self.client.close(), self.client.loop
+        )
+        self.logger.info("Discord client stopped")
 
     # Fix in JupiterDiscordClient._save_config method
     def _save_config(self):
@@ -481,36 +498,37 @@ class JupiterDiscordClient:
             # Get current time for timestamp
             current_time = time.time()
             
-            # Filter for only DM channels
-            dm_channels = {}
+            # NEW: Use our persistent dm_channels set
+            dm_channels_dict = {}
+            saved_count = 0
             
-            # Debug output
-            self.logger.debug(f"Active channels before filtering: {len(self.active_channels)} channels")
+            self.logger.debug(f"Checking {len(self.dm_channels)} DM channels for saving")
             
-            for channel_id, expiry in self.active_channels.items():
+            for channel_id in self.dm_channels:
                 try:
-                    # Try to get channel info - CONVERT TO INT
-                    channel = self.client.get_channel(int(channel_id))
+                    # Try to get channel info
+                    channel = self.client.get_channel(channel_id)
                     
                     if channel and isinstance(channel, discord.DMChannel):
                         # Store user info and last interaction time
-                        dm_channels[str(channel_id)] = {
+                        dm_channels_dict[str(channel_id)] = {
                             "user_id": str(channel.recipient.id),
                             "username": channel.recipient.name,
                             "last_active": current_time
                         }
+                        saved_count += 1
                         self.logger.debug(f"Saving DM with {channel.recipient.name}")
                 except Exception as e:
                     self.logger.error(f"Error processing channel {channel_id}: {e}")
             
             # Save to config file
-            full_config["discord"]["active_dms"] = dm_channels
+            full_config["discord"]["active_dms"] = dm_channels_dict
             
             # Write back to disk
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(full_config, f, indent=2)
                 
-            self.logger.info(f"Saved {len(dm_channels)} active DM channels")
+            self.logger.info(f"Saved {saved_count} active DM channels")
             
         except Exception as e:
             self.logger.error(f"Error saving active DMs: {e}", exc_info=True)
@@ -568,3 +586,24 @@ class JupiterDiscordClient:
                 
         except Exception as e:
             self.logger.error(f"Error in startup notifications: {e}", exc_info=True)
+
+    def _load_active_dms(self):
+        """Load previously saved DM channels"""
+        try:
+            config_path = "config/default_config.json"
+            with open(config_path, 'r', encoding='utf-8') as f:
+                full_config = json.load(f)
+            
+            active_dms = full_config.get("discord", {}).get("active_dms", {})
+            self.logger.info(f"Found {len(active_dms)} saved DM channels")
+            
+            # Add to our tracking set
+            for channel_id_str in active_dms:
+                try:
+                    channel_id = int(channel_id_str)
+                    self.dm_channels.add(channel_id)
+                except ValueError:
+                    self.logger.error(f"Invalid channel ID: {channel_id_str}")
+            
+        except Exception as e:
+            self.logger.error(f"Error loading active DMs: {e}")
