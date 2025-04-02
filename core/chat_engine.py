@@ -9,8 +9,6 @@ from user_id_commands import handle_id_commands
 from utils.intent_recog import load_model, get_intent
 from utils.voice_cmd import intent_functions
 from utils.text_processing import count_tokens, truncate_to_token_limit
-from utils.calendar.prompt_enhancer import enhance_prompt
-from utils.calendar import process_calendar_command
 from utils.voice_manager import VoiceManager, VoiceState
 from utils.piper import llm_speak
 
@@ -181,14 +179,6 @@ class ChatEngine:
         # Add user information to system prompt
         user_info = self.format_user_information()
         enhanced_system_prompt = system_prompt + user_info
-        
-        # Add calendar information to system prompt if available
-        if self.user_data_manager.current_user and 'name' in self.user_data_manager.current_user:
-            user_id = self.user_data_manager.current_user.get('name')
-            try:
-                enhanced_system_prompt = enhance_prompt(user_id, enhanced_system_prompt)
-            except Exception as e:
-                logger.error(f"Error enhancing prompt with calendar data: {e}")
         
         user_prefix = f"{self.user_data_manager.current_user.get('name', 'User')}:"
         
@@ -363,18 +353,6 @@ class ChatEngine:
         self._speak_response("Here's what I remember about you.")
         return response
     
-    def _handle_calendar_command(self, args):
-        """Handle calendar command"""
-        # Check for preferences command
-        if args.lower() == 'preferences' and hasattr(self.ui, 'root'):
-            try:
-                from utils.calendar.preferences_ui import show_preferences_dialog
-                # Show preferences dialog
-                self.ui.root.after(0, lambda: show_preferences_dialog(self.ui.root))
-                return "Opening calendar notification preferences..."
-            except (ImportError, AttributeError) as e:
-                return "Calendar preferences are not available in this mode."
-                
         # Handle other calendar commands
         try:
             user_id = self.user_data_manager.current_user.get('user_id')

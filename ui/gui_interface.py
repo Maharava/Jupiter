@@ -340,40 +340,6 @@ class GUIInterface:
         except Exception as e:
             logger.warning(f"Could not set up application icons: {e}")
     
-    def _init_calendar_notifications(self):
-        """Initialize calendar notifications if available with error handling"""
-        try:
-            from utils.calendar import initialize_calendar_daemon
-            initialize_calendar_daemon(gui_root=self.root, terminal_ui=None, enable_voice=True)
-            logger.info("Calendar notifications initialized")
-        except ImportError:
-            logger.info("Calendar module not available, notifications disabled")
-        except Exception as e:
-            logger.warning(f"Could not initialize calendar notifications: {e}")
-    
-    def _setup_calendar_button(self, button_frame):
-        """Set up calendar button if calendar module is available with error handling"""
-        try:
-            from utils.calendar.preferences_ui import show_preferences_dialog
-            calendar_button = tk.Button(
-                button_frame,
-                text="Calendar",
-                bg="#333",
-                fg="white",
-                relief=tk.FLAT,
-                padx=10,
-                pady=2,
-                command=lambda: self._schedule_safe_update(
-                    lambda: show_preferences_dialog(self.root)
-                )
-            )
-            calendar_button.pack(side=tk.LEFT, padx=5)
-            logger.info("Calendar button added")
-        except ImportError:
-            logger.info("Calendar module not available, button not added")
-        except Exception as e:
-            logger.warning(f"Could not add calendar button: {e}")
-    
     def _process_commands(self):
         """Process commands from the command queue with proper error handling"""
         while self.is_running:

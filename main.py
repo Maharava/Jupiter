@@ -135,17 +135,6 @@ def main():
         test_mode=args.test
     )
 
-    # Initialize calendar notification system if enabled
-    if config.get('calendar', {}).get('enable_notifications', True):
-        from utils.calendar import initialize_calendar_daemon
-        
-        if args.gui:
-            # For GUI mode, set up later with root window
-            pass
-        else:
-            # For terminal mode, pass the terminal UI
-            initialize_calendar_daemon(gui_root=None, terminal_ui=ui, enable_voice=True)
-
     # Create wake word detector but don't start it yet
     detector = None
     discord_module = None
