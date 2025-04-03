@@ -50,7 +50,8 @@ def load_config():
         "paths": {
             "prompt_folder": "prompts",
             "logs_folder": "logs",
-            "user_data_file": "user_data.json"
+            "user_data_file": "user_data.json",
+            "data_folder": "data"  # Add this line
         },
         "ui": {
             "jupiter_color": "yellow",
