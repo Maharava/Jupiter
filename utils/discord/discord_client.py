@@ -3,6 +3,7 @@ import asyncio
 import logging
 import time
 import json
+import os
 from typing import Dict, Any, List, Optional
 from utils.commands.discord_adapter import handle_discord_command
 # Important: Add this import to ensure commands are registered
@@ -40,9 +41,6 @@ class JupiterDiscordClient:
         # Channel monitoring state - {channel_id: expiry_timestamp}
         self.active_channels = {}
         
-        # NEW: Track DM channels separately (won't expire with timeout)
-        self.dm_channels = set()
-        
         # Setup event handlers
         self.setup_event_handlers()
         
@@ -51,9 +49,6 @@ class JupiterDiscordClient:
         
         # Running state
         self.is_running = False
-
-        # NEW: Load any previously saved DMs
-        self._load_active_dms()
         
         # Load blacklisted channels from main config if available
         if "blacklisted_channels" in chat_engine.config.get("discord", {}):
@@ -68,7 +63,7 @@ class JupiterDiscordClient:
         from utils.commands.registry import registry
         import discord
         
-        # Register ID command
+        # Register ID command (removing guild_only parameter)
         @self.tree.command(name="id", description="Display your Jupiter ID information")
         async def id_command(interaction: discord.Interaction):
             cmd = registry.get("id")
@@ -82,7 +77,7 @@ class JupiterDiscordClient:
             response = cmd.handler(ctx)
             await interaction.response.send_message(response)
         
-        # Register help command
+        # Register help command (removing guild_only parameter)
         @self.tree.command(name="help", description="Show available commands")
         async def help_command(interaction: discord.Interaction):
             cmd = registry.get("help")
@@ -96,7 +91,7 @@ class JupiterDiscordClient:
             response = cmd.handler(ctx)
             await interaction.response.send_message(response)
         
-        # Register deaf command
+        # Register deaf command (removing guild_only parameter)
         @self.tree.command(name="deaf", description="Make Jupiter stop listening in the current channel")
         async def deaf_command(interaction: discord.Interaction):
             cmd = registry.get("deaf")
@@ -110,7 +105,7 @@ class JupiterDiscordClient:
             response = cmd.handler(ctx)
             await interaction.response.send_message(response)
         
-        # Register listen command
+        # Register listen command (removing guild_only parameter)
         @self.tree.command(name="listen", description="Make Jupiter start listening in the current channel again")
         async def listen_command(interaction: discord.Interaction):
             cmd = registry.get("listen")
@@ -133,18 +128,38 @@ class JupiterDiscordClient:
             self.logger.info(f"Logged in as {self.client.user}")
             self.is_running = True
             
-            # Send notifications to active DM users
-            await self._send_startup_notifications()
-            
             # Start initial status as Away
             await self.client.change_presence(status=discord.Status.idle)
             
             # Start periodic status update task
             self.client.loop.create_task(self._periodic_status_updates())
             
-            # Sync slash commands with Discord
-            await self.tree.sync()
-            self.logger.info("Synced slash commands with Discord")
+            # Clear and sync slash commands with Discord - GUILD ONLY
+            try:
+                # Log start of synchronization
+                self.logger.info(f"Starting command synchronization for {len(self.client.guilds)} guilds")
+                
+                # Sync commands to each guild individually
+                for guild in self.client.guilds:
+                    try:
+                        guild_id = guild.id
+                        
+                        # Clear existing commands to avoid duplicates
+                        self.tree.clear_commands(guild=discord.Object(id=guild_id))
+                        
+                        # Sync commands to this guild
+                        await self.tree.sync(guild=discord.Object(id=guild_id))
+                        
+                        self.logger.info(f"Synced slash commands to guild: {guild.name} (ID: {guild_id})")
+                    except Exception as e:
+                        self.logger.error(f"Error syncing commands to guild {guild.name}: {str(e)}")
+                
+                self.logger.info(f"Completed syncing slash commands to {len(self.client.guilds)} guilds")
+            except Exception as e:
+                self.logger.error(f"Error during command sync process: {str(e)}", exc_info=True)
+            
+            self.logger.info("Starting to send greetings to DM users")
+            self.client.loop.create_task(self._send_dm_greeting())
         
         @self.client.event
         async def on_message(message):
@@ -153,11 +168,18 @@ class JupiterDiscordClient:
             if message.author == self.client.user:
                 return
             
-            # ADD THIS: Track DM channels explicitly
+            # Handle DM channels
             if isinstance(message.channel, discord.DMChannel):
-                self.logger.debug(f"Adding DM with {message.author.name} to active channels")
-                self.active_channels[message.channel.id] = time.time() + self.config.get("observation_timeout", 300)
+                # Add to temporary active channels for status updates
+                timeout = self.config.get("observation_timeout", 300)
+                self.active_channels[message.channel.id] = time.time() + timeout
                 
+                # Save DM information to persistent storage
+                self._save_dm_info(
+                    message.channel.id,
+                    message.author.name
+                )
+            
             # Check for commands
             if message.content.startswith('/'):
                 await self.handle_command(message)
@@ -169,7 +191,9 @@ class JupiterDiscordClient:
         @self.client.event
         async def on_error(event, *args, **kwargs):
             """Handle Discord client errors"""
-            self.logger.error(f"Discord error in {event}")
+            import traceback
+            error = traceback.format_exc()
+            self.logger.error(f"Discord error in {event}: {error}")
             
     async def handle_command(self, message):
         """Handle Discord commands using the common registry"""
@@ -223,9 +247,6 @@ class JupiterDiscordClient:
             # Add DM channel to active channels for immediate processing
             timeout = self.config.get("observation_timeout", 300)
             self.active_channels[message.channel.id] = time.time() + timeout
-            
-            # NEW: Also track as persistent DM channel
-            self.dm_channels.add(message.channel.id)
             
             self.logger.info(f"Activated DM channel {message.channel.id} for {timeout} seconds")
             
@@ -432,9 +453,6 @@ class JupiterDiscordClient:
         """Stop the Discord client"""
         self.is_running = False
         
-        # Save active DMs before shutting down
-        self._save_active_dms()
-        
         # Set status to invisible before closing
         if self.client.loop and self.client.is_ready():
             asyncio.run_coroutine_threadsafe(
@@ -446,164 +464,108 @@ class JupiterDiscordClient:
         asyncio.run_coroutine_threadsafe(
             self.client.close(), self.client.loop
         )
-        self.logger.info("Discord client stopped")
 
-    # Fix in JupiterDiscordClient._save_config method
-    def _save_config(self):
-        """Save Discord-specific config changes back to disk"""
+    async def _send_dm_greeting(self):
+        """
+        Send a personalized LLM-generated greeting to all DM channels
+        
+        Returns:
+            tuple: (success_count, fail_count, error_details)
+        """
+        success_count = 0
+        fail_count = 0
+        error_details = []
+        
         try:
-            # Load the full config from disk
-            config_path = "config/default_config.json"
-            with open(config_path, 'r', encoding='utf-8') as f:
-                full_config = json.load(f)
+            # Check if file exists
+            dm_file_path = 'data/discord/dm_channels.json'
+            if not os.path.exists(dm_file_path):
+                self.logger.warning("DM channels file doesn't exist")
+                return 0, 0, ["DM channels file doesn't exist"]
             
-            # Update just the Discord-specific parts that can change
-            if "discord" not in full_config:
-                full_config["discord"] = {}
+            # Load DM data
+            with open(dm_file_path, 'r', encoding='utf-8') as f:
+                dm_data = json.load(f)
                 
-            # Update blacklisted channels - FIXED THIS SECTION
-            if hasattr(self.config, "blacklisted_channels"):
-                full_config["discord"]["blacklisted_channels"] = self.config.blacklisted_channels
-            elif isinstance(self.config, dict) and "blacklisted_channels" in self.config:
-                full_config["discord"]["blacklisted_channels"] = self.config["blacklisted_channels"]
+            if not dm_data:
+                self.logger.info("No DM channels found in storage")
+                return 0, 0, ["No DM channels found in storage"]
             
-            # Write back to disk
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(full_config, f, indent=2)
-                
-            return True
-        except Exception as e:
-            self.logger.error(f"Error saving config: {e}")
-            return False
-
-    async def _save_config_async(self):
-        """Save config asynchronously"""
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._save_config)
-
-    def _save_active_dms(self):
-        """Save list of active DM channels to config"""
-        try:
-            self.logger.info("Saving active Discord DMs...")
-            
-            # Load the full config from disk
-            config_path = "config/default_config.json"
-            with open(config_path, 'r', encoding='utf-8') as f:
-                full_config = json.load(f)
-                
-            # Make sure discord section exists
-            if "discord" not in full_config:
-                full_config["discord"] = {}
-            
-            # Get current time for timestamp
-            current_time = time.time()
-            
-            # NEW: Use our persistent dm_channels set
-            dm_channels_dict = {}
-            saved_count = 0
-            
-            self.logger.debug(f"Checking {len(self.dm_channels)} DM channels for saving")
-            
-            for channel_id in self.dm_channels:
-                try:
-                    # Try to get channel info
-                    channel = self.client.get_channel(channel_id)
-                    
-                    if channel and isinstance(channel, discord.DMChannel):
-                        # Store user info and last interaction time
-                        dm_channels_dict[str(channel_id)] = {
-                            "user_id": str(channel.recipient.id),
-                            "username": channel.recipient.name,
-                            "last_active": current_time
-                        }
-                        saved_count += 1
-                        self.logger.debug(f"Saving DM with {channel.recipient.name}")
-                except Exception as e:
-                    self.logger.error(f"Error processing channel {channel_id}: {e}")
-            
-            # Save to config file
-            full_config["discord"]["active_dms"] = dm_channels_dict
-            
-            # Write back to disk
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(full_config, f, indent=2)
-                
-            self.logger.info(f"Saved {saved_count} active DM channels")
-            
-        except Exception as e:
-            self.logger.error(f"Error saving active DMs: {e}", exc_info=True)
-
-    async def _send_startup_notifications(self):
-        """Send notifications to users Jupiter has active DMs with"""
-        try:
-            # Load active DMs from config
-            config_path = "config/default_config.json"
-            with open(config_path, 'r', encoding='utf-8') as f:
-                full_config = json.load(f)
-            
-            # Get active DMs and expiry time
-            dm_data = full_config.get("discord", {}).get("active_dms", {})
-            expiry_days = self.config.get("dm_expiry_days", 7)  # Default: 7 days
-            expiry_time = time.time() - (expiry_days * 86400)  # Convert to seconds
-            
-            # Set active channels from config (also refreshes active_channels dict)
-            active_dm_count = 0
-            
+            # Send greeting to each DM channel
             for channel_id_str, data in dm_data.items():
                 try:
-                    # Skip expired DMs
-                    if data.get("last_active", 0) < expiry_time:
-                        continue
-                        
-                    # Get user ID and create DM channel
-                    user_id = int(data.get("user_id"))
-                    user = await self.client.fetch_user(user_id)
-                    
-                    if user:
-                        channel = await user.create_dm()
-                        
-                        # Send startup message
-                        startup_message = self.config.get(
-                            "startup_message", 
-                            f"Hello! I'm {self.persona['name']} and I'm back online. Let me know if you need anything!"
-                        )
-                        await channel.send(startup_message)
-                        
-                        # Mark channel as active
-                        channel_id = int(channel_id_str)
-                        self.active_channels[channel_id] = time.time() + self.config.get("observation_timeout", 300)
-                        active_dm_count += 1
-                        
-                except Exception as e:
-                    self.logger.error(f"Error sending startup notification to {data.get('username', 'unknown')}: {e}")
-                    continue
-                    
-            self.logger.info(f"Sent startup notifications to {active_dm_count} users")
-            
-            # Update status if we have active channels
-            if active_dm_count > 0:
-                await self._update_discord_status()
-                
-        except Exception as e:
-            self.logger.error(f"Error in startup notifications: {e}", exc_info=True)
-
-    def _load_active_dms(self):
-        """Load previously saved DM channels"""
-        try:
-            config_path = "config/default_config.json"
-            with open(config_path, 'r', encoding='utf-8') as f:
-                full_config = json.load(f)
-            
-            active_dms = full_config.get("discord", {}).get("active_dms", {})
-            self.logger.info(f"Found {len(active_dms)} saved DM channels")
-            
-            # Add to our tracking set
-            for channel_id_str in active_dms:
-                try:
+                    # Convert string ID to integer
                     channel_id = int(channel_id_str)
-                    self.dm_channels.add(channel_id)
-                except ValueError:
-                    self.logger.error(f"Invalid channel ID: {channel_id_str}")
+                    username = data.get('username', 'User')
+                    
+                    # Try to fetch the channel
+                    channel = self.client.get_channel(channel_id)
+                    
+                    # If channel not found, try to fetch as private channel
+                    if channel is None:
+                        try:
+                            channel = await self.client.fetch_channel(channel_id)
+                        except Exception as e:
+                            error_msg = f"Could not fetch channel {channel_id}: {str(e)}"
+                            self.logger.warning(error_msg)
+                            error_details.append(error_msg)
+                            fail_count += 1
+                            continue
+                    
+                    # Create a temporary user object for the LLM
+                    temp_user = self._get_jupiter_user(await self.client.fetch_user(channel.recipient.id))
+                    
+                    # Generate personalized greeting through the LLM
+                    greeting_prompt = f"You have come back online. Please greet {username}"
+                    greeting = await self._generate_response_async(temp_user, greeting_prompt)
+                    
+                    # Send the greeting
+                    await channel.send(greeting)
+                    success_count += 1
+                    self.logger.info(f"Sent greeting to {username} in DM channel {channel_id}: {greeting[:50]}...")
+                    
+                except Exception as e:
+                    error_msg = f"Error sending greeting to {channel_id_str} ({data.get('username', 'Unknown')}): {str(e)}"
+                    self.logger.error(error_msg)
+                    error_details.append(error_msg)
+                    fail_count += 1
+            
+            return success_count, fail_count, error_details
             
         except Exception as e:
-            self.logger.error(f"Error loading active DMs: {e}")
+            error_msg = f"Error in _send_dm_greeting: {str(e)}"
+            self.logger.error(error_msg, exc_info=True)
+            return 0, 0, [error_msg]
+
+    def _save_dm_info(self, channel_id, username):
+        """Save DM channel information to persistent storage"""
+        try:
+            # Ensure directory exists
+            os.makedirs('data/discord', exist_ok=True)
+            
+            # Load existing data if available
+            dm_file_path = 'data/discord/dm_channels.json'
+            dm_data = {}
+            
+            if os.path.exists(dm_file_path):
+                try:
+                    with open(dm_file_path, 'r', encoding='utf-8') as f:
+                        dm_data = json.load(f)
+                except json.JSONDecodeError:
+                    self.logger.warning(f"Could not parse DM channels file, creating new one")
+            
+            # Update with new data
+            channel_id_str = str(channel_id)  # Convert to string for JSON keys
+            dm_data[channel_id_str] = {
+                'username': username,
+                'last_active': time.time()
+            }
+            
+            # Save updated data
+            with open(dm_file_path, 'w', encoding='utf-8') as f:
+                json.dump(dm_data, f, indent=2)
+                
+            self.logger.debug(f"Saved DM info for channel {channel_id} ({username})")
+            
+        except Exception as e:
+            self.logger.error(f"Error saving DM info: {str(e)}", exc_info=True)

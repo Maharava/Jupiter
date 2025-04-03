@@ -252,6 +252,106 @@ def persona_command(ctx, args=None):
     else:
         return f"Unknown persona '{requested}'. Use '/persona' to see available options."
 
+def todo_command(ctx, args=None):
+    """Add an item to Jupiter's todo list"""
+    import os
+    import datetime
+    
+    # Get user info from context
+    user = ctx.get("user", {})
+    platform = ctx.get("platform", "unknown")
+    user_name = user.get("name", "Unknown User")
+    
+    # Validate arguments
+    if not args or not args.strip():
+        return "Please provide a todo item. Usage: `/todo [description of task]`"
+    
+    todo_item = args.strip()
+    
+    # Create data directory if it doesn't exist
+    os.makedirs("data", exist_ok=True)
+    
+    # Get timestamp
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Format the todo entry
+    entry = f"[{timestamp}] [{platform}] [{user_name}] {todo_item}\n"
+    
+    try:
+        # Append to todo file
+        with open("data/todo.txt", "a", encoding="utf-8") as f:
+            f.write(entry)
+        
+        return f"✅ Added to my todo list: '{todo_item}'"
+    except Exception as e:
+        return f"❌ Error saving todo item: {str(e)}"
+
+def model_command(ctx, args=None):
+    """Show information about the connected LLM model"""
+    # Get LLM client from context
+    llm_client = ctx.get("llm_client")
+    
+    if not llm_client:
+        return "Error: Could not access LLM client information."
+    
+    # Get model information
+    model_info = {
+        "model": llm_client.default_model,
+        "api_url": llm_client.api_url,
+        "test_mode": llm_client.test_mode
+    }
+    
+    # Format the response
+    if model_info["test_mode"]:
+        response = f"""
+**LLM Connection: Test Mode**
+• Model: {model_info["model"]} (simulated)
+• API URL: {model_info["api_url"]} (not connected)
+• Status: Operating in test mode with simulated responses
+"""
+    else:
+        response = f"""
+**LLM Connection: Active**
+• Model: {model_info["model"]}
+• API URL: {model_info["api_url"]}
+• Status: Connected and operational
+"""
+    
+    return response
+
+def _handle_help_command(self, args):
+    """Handle /help command"""
+    help_text = "# Available Commands\n\n"
+    
+    help_text += "## General Commands\n"
+    help_text += "- `/help` - Show this help message\n"
+    help_text += "- `/name [new name]` - Change your name\n"
+    help_text += "- `/memory` - Show what Jupiter remembers about you\n"
+    
+    help_text += "\n## Conversation Management\n"
+    help_text += "- `/history [limit]` - Show your recent conversations\n"
+    help_text += "- `/history with [username]` - Show conversations with a specific user\n"
+    help_text += "- `/conversation [ID]` - View a specific conversation\n"
+    help_text += "- `/conversation current` - View the current conversation\n"
+    help_text += "- `/search [query]` - Search your conversations\n"
+    
+    help_text += "\n## Voice Commands\n"
+    help_text += "- `/voice on|off` - Enable or disable voice recognition\n"
+    
+    if self.voice_manager and self.voice_manager.detector_available:
+        help_text += "- `/debug voice` - Show voice recognition debug information\n"
+    
+    return help_text
+
+# Register the command
+registry.register(Command(
+    name="todo",
+    handler=todo_command,
+    description="Add an item to Jupiter's todo list",
+    usage="/todo [description of task]",
+    platforms=["discord", "terminal", "gui"]  # Available on all platforms
+))
+
 # Register the command
 registry.register(Command(
     name="persona",
@@ -259,6 +359,15 @@ registry.register(Command(
     description="Change or view AI persona",
     usage="/persona [name]",
     platforms=["discord", "terminal", "gui"]
+))
+
+# Register the command
+registry.register(Command(
+    name="model",
+    handler=model_command,
+    description="Show information about the connected LLM model",
+    usage="/model",
+    platforms=["discord", "terminal", "gui"]  # Available on all platforms
 ))
 
 # Register commands
