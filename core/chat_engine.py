@@ -36,8 +36,8 @@ class ChatEngine:
         self.config = config
         self.test_mode = test_mode
         
-        # Set current platform - default to "gui"
-        self.current_platform = "gui"
+        # Set current platform - use terminal instead of GUI
+        self.current_platform = "terminal"
         
         # Initialize conversation manager (replaces conversation_history)
         self.conversation_manager = ConversationManager(config, user_data_manager)
@@ -72,12 +72,6 @@ class ChatEngine:
         # Update UI with persona
         if hasattr(self.ui, "set_ai_name"):
             self.ui.set_ai_name(self.ai_name)
-            
-        if hasattr(self.ui, "set_ai_color") and "color" in self.persona:
-            try:
-                self.ui.set_ai_color(self.persona["color"])
-            except Exception as e:
-                self.logger.warning(f"Could not set AI color: {e}")
     
     def _initialize_voice_manager(self):
         """Initialize simplified voice manager for TTS only"""
@@ -99,8 +93,6 @@ class ChatEngine:
                 
         except Exception as e:
             logger.error(f"Failed to initialize voice manager: {e}", exc_info=True)
-            if hasattr(self.ui, 'set_status'):
-                self.ui.set_status(f"Voice initialization error: {str(e)[:50]}", False)
             return None        
                 
         # If we get here, model not found
@@ -291,37 +283,38 @@ class ChatEngine:
             if cmd_prefix.startswith(command):
                 return handler(args)
         
-        # Check for commands in the registry
-        # Import registry here to avoid circular imports
-        from utils.commands.registry import registry
-        
-        # Strip the leading slash for registry lookup
-        cmd_name = command[1:] if command.startswith('/') else command
-        
-        # Look for command in registry
-        cmd = registry.get_command(cmd_name)
-        if cmd and (self.current_platform in cmd.platforms or not cmd.platforms):
-            # Prepare context object similar to what command handlers expect
-            ctx = {
-                "platform": self.current_platform,
-                "user": self.user_data_manager.current_user,
-                "ui": self.ui,
-                "user_manager": self.user_data_manager,
-                "llm_client": self.llm_client,
-                "client": getattr(self, "client", None),
-                "conversation_manager": self.conversation_manager  # Add conversation manager
-            }
+        # Lazy import the registry only when needed
+        # This helps avoid circular dependencies
+        try:
+            from utils.commands.registry import registry
             
-            # Execute the command handler
-            try:
-                return cmd.handler(ctx, args)
-            except Exception as e:
-                # Fix the logging error by using standard logging
-                import logging
-                logging.error(f"Error executing command '{cmd_name}': {e}")
-                # Or alternatively, if self.logger exists:
-                # self.logger.exception(f"Error executing command '{cmd_name}'")
-                return f"Error executing command: {str(e)}"
+            # Strip the leading slash for registry lookup
+            cmd_name = command[1:] if command.startswith('/') else command
+            
+            # Look for command in registry
+            cmd = registry.get_command(cmd_name)
+            if cmd and (self.current_platform in cmd.platforms or not cmd.platforms):
+                # Prepare context object similar to what command handlers expect
+                ctx = {
+                    "platform": self.current_platform,  # This is now always "terminal"
+                    "user": self.user_data_manager.current_user,
+                    "ui": self.ui,
+                    "user_manager": self.user_data_manager,
+                    "llm_client": self.llm_client,
+                    "client": getattr(self, "client", None),
+                    "conversation_manager": self.conversation_manager
+                }
+                
+                # Execute the command handler
+                try:
+                    return cmd.handler(ctx, args)
+                except Exception as e:
+                    # Fix the logging error by using standard logging
+                    import logging
+                    logging.error(f"Error executing command '{cmd_name}': {e}")
+                    return f"Error executing command: {str(e)}"
+        except ImportError:
+            logger.error("Could not import command registry, commands may not work correctly")
                 
         # Not a command
         return None
@@ -347,8 +340,6 @@ class ChatEngine:
             enabled = self.voice_manager.toggle_voice(enabled)
             return f"Voice recognition {'enabled' if enabled else 'disabled'}"
         else:
-            if hasattr(self.ui, 'set_status'):
-                self.ui.set_status("Voice system not available", False)
             return "Voice recognition system is not available - check the log for details"
     
     def _handle_name_command(self, args):
@@ -390,31 +381,34 @@ class ChatEngine:
     
     def _handle_help_command(self, args):
         """Handle help command"""
-        # Use the registry to get commands
-        from utils.commands.registry import registry
-        
-        commands = registry.get_for_platform(self.current_platform)
-        
-        help_text = "# Available Commands\n\n"
-        
-        # Group commands by category
-        for cmd in sorted(commands, key=lambda x: x.name):
-            help_text += f"- `{cmd.usage}` - {cmd.description}\n"
-        
-        # Add built-in commands not in registry
-        help_text += "\n## Additional Commands\n"
-        help_text += "- `/voice on|off` - Enable or disable voice recognition\n"
-        help_text += "- `/memory` - Show what I remember about you\n"
-        help_text += "- `/history [limit|with username]` - Show conversation history\n"
-        help_text += "- `/conversation [ID|current]` - View a specific conversation\n"
-        help_text += "- `/search [query]` - Search your conversations\n"
-        
-        # Add test mode info
-        if self.test_mode:
-            help_text += "\n⚠️ TEST MODE is active - running without LLM backend\n"
-        
-        self._speak_response("Here are the available commands.")
-        return help_text
+        # Lazy import the registry only when needed
+        try:
+            from utils.commands.registry import registry
+            
+            commands = registry.get_for_platform(self.current_platform)
+            
+            help_text = "# Available Commands\n\n"
+            
+            # Group commands by category
+            for cmd in sorted(commands, key=lambda x: x.name):
+                help_text += f"- `{cmd.usage}` - {cmd.description}\n"
+            
+            # Add built-in commands not in registry
+            help_text += "\n## Additional Commands\n"
+            help_text += "- `/voice on|off` - Enable or disable voice recognition\n"
+            help_text += "- `/memory` - Show what I remember about you\n"
+            help_text += "- `/history [limit|with username]` - Show conversation history\n"
+            help_text += "- `/conversation [ID|current]` - View a specific conversation\n"
+            help_text += "- `/search [query]` - Search your conversations\n"
+            
+            # Add test mode info
+            if self.test_mode:
+                help_text += "\n⚠️ TEST MODE is active - running without LLM backend\n"
+            
+            self._speak_response("Here are the available commands.")
+            return help_text
+        except ImportError:
+            return "Could not load command registry. Basic commands are still available."
     
     def _handle_history_command(self, args):
         """
@@ -517,6 +511,124 @@ class ChatEngine:
         result += "Use `/conversation [ID]` to view a specific conversation."
         return result
 
+    def _handle_conversation_command(self, args):
+        """
+        Handle /conversation command to view a specific conversation
+        
+        Arguments:
+            args: Command arguments - can be 'current' or a conversation ID
+            
+        Returns:
+            Formatted conversation display
+        """
+        # Parse arguments
+        if not args:
+            return "Please specify a conversation ID or 'current' to view the current conversation."
+        
+        # Handle 'current' shortcut
+        if args.lower() == 'current':
+            conversation_id = self.conversation_manager.current_conversation_id
+            if not conversation_id:
+                return "No active conversation found."
+        else:
+            # Use the provided ID
+            conversation_id = args.strip()
+        
+        # Get the conversation
+        conversation = self.conversation_manager.get_conversation(conversation_id)
+        if not conversation:
+            return f"Conversation with ID '{conversation_id}' not found."
+        
+        # Format the conversation
+        messages = conversation.get("messages", [])
+        if not messages:
+            return f"Conversation '{conversation['title']}' exists but has no messages."
+        
+        # Format date
+        date_str = datetime.datetime.fromtimestamp(conversation["created_at"]).strftime("%Y-%m-%d %H:%M")
+        
+        # Get participant names
+        participant_names = []
+        for p_id in conversation["participants"]:
+            user = self.user_data_manager.get_user_by_id(p_id)
+            if user:
+                participant_names.append(user.get("name", "Unknown"))
+        
+        # Format output
+        result = f"# {conversation['title']}\n"
+        result += f"Date: {date_str}\n"
+        result += f"Participants: {', '.join(participant_names)}\n\n"
+        
+        # Add messages
+        for msg in messages:
+            sender_id = msg.get("sender_id", "unknown")
+            content = msg.get("content", "")
+            
+            if sender_id == "jupiter":
+                sender_name = "Jupiter"
+            else:
+                user = self.user_data_manager.get_user_by_id(sender_id)
+                sender_name = user.get("name", "Unknown") if user else "Unknown"
+            
+            result += f"**{sender_name}**: {content}\n\n"
+        
+        return result
+
+    def _handle_search_command(self, args):
+        """
+        Handle /search command to search conversations
+        
+        Arguments:
+            args: Search query string
+            
+        Returns:
+            Formatted search results
+        """
+        if not args:
+            return "Please provide a search query after the /search command."
+        
+        # Get current user ID
+        user_id = self.user_data_manager.current_user.get('user_id')
+        if not user_id:
+            return "You need to be logged in to search your conversations."
+        
+        # Search conversations
+        results = self.conversation_manager.search_conversations(user_id, args)
+        
+        if not results:
+            return f"No results found for '{args}'."
+        
+        # Format output
+        output = f"# Search Results for '{args}'\n\n"
+        
+        for i, result in enumerate(results, 1):
+            date_str = datetime.datetime.fromtimestamp(result["created_at"]).strftime("%Y-%m-%d %H:%M")
+            output += f"{i}. **{result['title']}** ({date_str})\n"
+            output += f"   - {len(result['matches'])} matching messages\n"
+            output += f"   - ID: `{result['conversation_id']}`\n\n"
+            
+            # Show sample matches (limited to first 3)
+            output += "**Sample matches:**\n"
+            for j, message in enumerate(result['matches'][:3], 1):
+                sender_id = message.get("sender_id", "unknown")
+                if sender_id == "jupiter":
+                    sender_name = "Jupiter"
+                else:
+                    user = self.user_data_manager.get_user_by_id(sender_id)
+                    sender_name = user.get("name", "Unknown") if user else "Unknown"
+                    
+                content = message.get("content", "")
+                
+                # Truncate very long messages
+                if len(content) > 100:
+                    content = content[:97] + "..."
+                    
+                output += f"{j}. **{sender_name}**: {content}\n"
+            
+            output += "\n"
+        
+        output += "Use `/conversation [ID]` to view a specific conversation."
+        return output
 
     def __del__(self):
         """Clean up when the object is destroyed"""
@@ -544,11 +656,6 @@ class ChatEngine:
         if user_id:
             self.conversation_manager.start_conversation([user_id])
         
-        # Clear the UI if it's a GUI
-        if hasattr(self.ui, 'clear_chat'):
-            self.ui.clear_chat()
-            self.ui.set_status("Restarting chat...", True)
-        
         # Special test mode notice if applicable
         test_mode_notice = ""
         if self.test_mode:
@@ -561,121 +668,14 @@ class ChatEngine:
         greeting = f"Hello again, {self.user_data_manager.current_user.get('name', 'User')}! How can I help you today?"
         self.ui.print_jupiter_message(greeting)
         self._speak_response(greeting)
-        
-        # Reset status if it's a GUI
-        if hasattr(self.ui, 'set_status'):
-            if self.test_mode:
-                self.ui.set_status("TEST MODE - Ready")
-            else:
-                self.ui.set_status("Ready")
-    
-    def show_knowledge(self):
-        """Show knowledge view with user information"""
-        if hasattr(self.ui, 'set_status'):
-            status_text = "Loading knowledge..."
-            if self.test_mode:
-                status_text = "TEST MODE - " + status_text
-            self.ui.set_status(status_text, True)
-            
-        # Get user data from the model
-        user_info = self.user_data_manager.current_user
-        
-        # Send data to UI and show knowledge view
-        self.ui.create_knowledge_bubbles(user_info)
-        self.ui.show_knowledge_view()
-        
-        # Speak notification
-        self._speak_response("Showing your knowledge profile.")
-        
-        # Reset status
-        if hasattr(self.ui, 'set_status'):
-            status_text = "Viewing Knowledge"
-            if self.test_mode:
-                status_text = "TEST MODE - " + status_text
-            self.ui.set_status(status_text, False)
-            
-    def process_knowledge_edits(self):
-        """Process knowledge edits from the UI"""
-        # Check if the UI has a knowledge edit queue
-        if not hasattr(self.ui, 'knowledge_edit_queue'):
-            return
-            
-        # Process all edits in the queue
-        edits_processed = False
-        while not self.ui.knowledge_edit_queue.empty():
-            try:
-                edit = self.ui.knowledge_edit_queue.get()
-                
-                # Handle different edit types
-                if edit["action"] == "edit":
-                    # Update simple value
-                    self.user_data_manager.current_user[edit["category"]] = edit["new_value"]
-                    logger.info(f"Updated {edit['category']} from '{edit['old_value']}' to '{edit['new_value']}'")
-                    edits_processed = True
-                        
-                elif edit["action"] == "remove":
-                    # Remove category entirely
-                    if edit["category"] in self.user_data_manager.current_user:
-                        del self.user_data_manager.current_user[edit["category"]]
-                        logger.info(f"Removed {edit['category']}")
-                        edits_processed = True
-                        
-                elif edit["action"] == "add_list_item":
-                    # Add item to list
-                    category = edit["category"]
-                    new_item = edit["value"]
-                    
-                    # Create list if it doesn't exist
-                    if category not in self.user_data_manager.current_user:
-                        self.user_data_manager.current_user[category] = []
-                        
-                    # Add item if it's not already in the list
-                    if new_item not in self.user_data_manager.current_user[category]:
-                        self.user_data_manager.current_user[category].append(new_item)
-                        logger.info(f"Added '{new_item}' to {category}")
-                        edits_processed = True
-                        
-                elif edit["action"] == "remove_list_item":
-                    # Remove item from list
-                    category = edit["category"]
-                    item = edit["value"]
-                    
-                    # Remove item if list exists
-                    if category in self.user_data_manager.current_user and isinstance(self.user_data_manager.current_user[category], list):
-                        if item in self.user_data_manager.current_user[category]:
-                            self.user_data_manager.current_user[category].remove(item)
-                            logger.info(f"Removed '{item}' from {category}")
-                            edits_processed = True
-                            
-                        # If list is now empty, remove the category
-                        if not self.user_data_manager.current_user[category]:
-                            del self.user_data_manager.current_user[category]
-                            logger.info(f"Removed empty category {category}")
-                
-                # Mark the task as done
-                self.ui.knowledge_edit_queue.task_done()
-                
-            except Exception as e:
-                logger.error(f"Error processing knowledge edit: {e}")
-                try:
-                    self.ui.knowledge_edit_queue.task_done()
-                except:
-                    pass
-        
-        # Save changes to user model
-        if edits_processed:
-            self.user_data_manager.save_current_user()
-            self._speak_response("Knowledge profile updated.")
     
     def run(self):
         """Run the chat interface"""
         # Setup phase
         self.ui.print_welcome()
         self._setup_ui_callbacks()
-        self._update_ui_status("Initializing...", True)
         self.handle_initial_greeting()
         self.ui.print_exit_instructions()
-        self._update_ui_status("Ready")
         self._initialize_voice_features()
         
         # Main chat loop
@@ -699,16 +699,12 @@ class ChatEngine:
             # Check for intent triggers
             if self._process_intent(user_input):
                 continue
-                
-            # Update UI status
-            self._update_ui_status("Processing your request...", True)
             
             # Check for commands
             command_response = self.handle_user_commands(user_input)
             if command_response:
                 self.ui.print_jupiter_message(command_response)
                 self.logger.log_message("Jupiter:", command_response)
-                self._update_ui_status("Ready")
                 continue
                 
             # Process normal input
@@ -805,9 +801,6 @@ class ChatEngine:
         # Add to conversation context
         self.conversation_manager.add_to_context(user_id, user_input, "user")
         
-        # Update UI status
-        self._update_ui_status("Thinking...", True)
-        
         # Generate response
         llm_message = self.prepare_message_for_llm(user_input)
         response = self.llm_client.generate_chat_response(
@@ -817,6 +810,30 @@ class ChatEngine:
         
         # Validate and clean the response
         response = self._validate_response(response)
+        
+        # If response is empty after validation, retry with modified prompt
+        retry_count = 0
+        max_retries = 2
+        
+        while not response.strip() and retry_count < max_retries:
+            self.logger.warning(f"Empty response detected, retrying ({retry_count+1}/{max_retries})")
+            
+            # Modify the prompt to instruct LLM to avoid user names
+            retry_message = llm_message + "\n\nIMPORTANT: Your previous response was filtered. A response MUST be provided without mentioning yours or the user's names."
+            
+            # Try again with modified prompt
+            response = self.llm_client.generate_chat_response(
+                retry_message,
+                temperature=self.config['llm']['chat_temperature'] * 0.9  # Slightly reduce temperature
+            )
+            
+            # Validate again
+            response = self._validate_response(response)
+            retry_count += 1
+        
+        # If still empty, provide a fallback message
+        if not response.strip():
+            response = "I apologize, but I'm having trouble generating an appropriate response. Could you please rephrase your question or ask something else?"
         
         # Log the complete exchange
         self.exchange_logger.log_exchange(user_id, llm_message, user_input, response)
@@ -829,18 +846,7 @@ class ChatEngine:
         # Add to conversation context
         self.conversation_manager.add_to_context(self.ai_name.lower(), response, "assistant")
         
-        # Reset UI status
-        self._update_ui_status("Ready")
-        
         return response
-    
-    def _update_ui_status(self, message, busy=False):
-        """Update UI status with test mode awareness"""
-        if hasattr(self.ui, 'set_status'):
-            status_text = message
-            if self.test_mode:
-                status_text = f"TEST MODE - {message}"
-            self.ui.set_status(status_text, busy)
     
     def _process_intent(self, user_input):
         """Process input for intent recognition, returns True if handled"""
@@ -888,7 +894,7 @@ class ChatEngine:
         # Register the UI callback for voice state changes
         if hasattr(self, 'voice_manager') and self.voice_manager:
             self.voice_manager.set_ui_callback(
-                lambda state: self.ui.update_voice_state(state) if hasattr(self.ui, 'update_voice_state') else None
+                lambda state: None  # No UI callbacks needed in terminal mode
             )
 
     def _initialize_voice_features(self):
@@ -898,13 +904,6 @@ class ChatEngine:
                 # Start the voice manager if it exists and isn't already running
                 if not self.voice_manager.running:
                     self.voice_manager.start()
-                
-                # Update UI if needed
-                if hasattr(self.ui, 'set_status') and self.voice_manager.enabled:
-                    if self.voice_manager.detector_available:
-                        self.ui.set_status("Listening for wake word", False)
-                    else:
-                        self.ui.set_status("Voice active for speaking only", False)
             except Exception as e:
                 logger.error(f"Error initializing voice features: {e}")
 

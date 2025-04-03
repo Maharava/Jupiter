@@ -34,9 +34,10 @@ async def handle_discord_command(client, message):
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, command.handler, ctx, args)
         
-        # Send response
+        # Send response using client's method that handles long messages
         if response:
-            await message.channel.send(response)
+            # Use the client's send_response method instead of direct send
+            await client._send_response(message.channel, response)
         
         return True
     except Exception as e:

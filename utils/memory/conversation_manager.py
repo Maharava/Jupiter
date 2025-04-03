@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Union
 import tiktoken  # For token counting
+from models.user_data_manager import UserDataManager
 
 class ConversationManager:
     """

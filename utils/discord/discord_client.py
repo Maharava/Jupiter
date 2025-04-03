@@ -6,7 +6,6 @@ import json
 import os
 from typing import Dict, Any, List, Optional
 from utils.commands.discord_adapter import handle_discord_command
-# Important: Add this import to ensure commands are registered
 import utils.commands.command_core
 from discord import app_commands
 
@@ -380,6 +379,34 @@ class JupiterDiscordClient:
                 temperature=self.chat_engine.config['llm']['chat_temperature']
             )
             
+            # Validate and clean the response
+            response = response.strip()
+            
+            # If response is empty after validation, retry with modified prompt
+            retry_count = 0
+            max_retries = 2
+            
+            while not response and retry_count < max_retries:
+                self.logger.warning(f"Empty Discord response detected, retrying ({retry_count+1}/{max_retries})")
+                
+                # Modify the prompt to instruct LLM to avoid certain terms
+                retry_message = llm_message + "\n\nIMPORTANT: Your previous response was filtered. A response MUST be provided without mentioning yours or the user's names."
+                
+                # Try again with modified prompt
+                response = self.chat_engine.llm_client.generate_chat_response(
+                    retry_message,
+                    temperature=self.chat_engine.config['llm']['chat_temperature'] * 0.9  # Slightly reduce temperature
+                )
+                
+                # Validate again
+                response = response.strip()
+                retry_count += 1
+            
+            # If still empty, provide a fallback message
+            if not response:
+                preferred_name = jupiter_user.get('name', 'there')
+                response = f"Hello {preferred_name}! I'm back online and ready to chat. How have you been?"
+            
             return response
             
         except Exception as e:
@@ -406,7 +433,7 @@ class JupiterDiscordClient:
         try:
             # Check if response is too long for a single message
             if len(response) > 2000:
-                chunks = self._split_message(response)
+                chunks = self._improved_split_message(response)
                 for chunk in chunks:
                     await channel.send(chunk)
                     # Small delay between chunks
@@ -436,6 +463,32 @@ class JupiterDiscordClient:
         # Add the last chunk
         if current_chunk:
             chunks.append(current_chunk)
+            
+        return chunks
+    
+    def _improved_split_message(self, message, max_length=2000):
+        """Split by character count rather than just newlines"""
+        if len(message) <= max_length:
+            return [message]
+            
+        chunks = []
+        current_pos = 0
+        
+        while current_pos < len(message):
+            # Find good split point
+            end_pos = min(current_pos + max_length, len(message))
+            
+            # Try to find natural break point
+            if end_pos < len(message):
+                # Look for newline, space, or punctuation to break at
+                for break_char in ['\n', '.', '!', '?', ' ']:
+                    last_break = message.rfind(break_char, current_pos, end_pos)
+                    if last_break != -1:
+                        end_pos = last_break + 1
+                        break
+                        
+            chunks.append(message[current_pos:end_pos])
+            current_pos = end_pos
             
         return chunks
     
@@ -524,6 +577,7 @@ class JupiterDiscordClient:
                     # Convert string ID to integer
                     channel_id = int(channel_id_str)
                     username = data.get('username', 'User')
+                    last_active = data.get('last_active', 0)
                     
                     # Try to fetch the channel
                     channel = self.client.get_channel(channel_id)
@@ -540,16 +594,38 @@ class JupiterDiscordClient:
                             continue
                     
                     # Create a temporary user object for the LLM
-                    temp_user = self._get_jupiter_user(await self.client.fetch_user(channel.recipient.id))
+                    discord_user = await self.client.fetch_user(channel.recipient.id)
+                    temp_user = self._get_jupiter_user(discord_user)
+                    
+                    # Get user's preferred name if available
+                    preferred_name = temp_user.get('name', username)
+                    
+                    # Calculate time since last active
+                    time_passed = self._format_time_passed(last_active)
+                    
+                    # Get recent conversation history if available
+                    recent_history = self._get_recent_conversation_history(
+                        temp_user.get('user_id'), 
+                        preferred_name
+                    )
+                    history_context = ""
+                    if recent_history:
+                        history_context = f"\nHere's a snippet of your last conversation with them:\n{recent_history}"
                     
                     # Generate personalized greeting through the LLM
-                    greeting_prompt = f"You have come back online. Please greet {username}"
+                    greeting_prompt = (
+                        f"You are coming back online after {time_passed} since your last interaction with {preferred_name}. "
+                        f" Generate a friendly, natural greeting that acknowledges the time passed."
+                        f"{history_context}\n"
+                        f" Your response should be conversational and feel like a continuation of your relationship."
+                    )
+                    
                     greeting = await self._generate_response_async(temp_user, greeting_prompt)
                     
                     # Send the greeting
                     await channel.send(greeting)
                     success_count += 1
-                    self.logger.info(f"Sent greeting to {username} in DM channel {channel_id}: {greeting[:50]}...")
+                    self.logger.info(f"Sent greeting to {preferred_name} in DM channel {channel_id}: {greeting[:50]}...")
                     
                 except Exception as e:
                     error_msg = f"Error sending greeting to {channel_id_str} ({data.get('username', 'Unknown')}): {str(e)}"
@@ -596,3 +672,78 @@ class JupiterDiscordClient:
             
         except Exception as e:
             self.logger.error(f"Error saving DM info: {str(e)}", exc_info=True)
+
+    def _format_time_passed(self, last_active_timestamp):
+        """Format the time passed since last activity in a human-readable way"""
+        if not last_active_timestamp:
+            return "some time"
+            
+        seconds_passed = time.time() - last_active_timestamp
+        
+        # Less than a day
+        if seconds_passed < 86400:
+            hours = int(seconds_passed / 3600)
+            if hours < 1:
+                return "a few hours"
+            return f"{hours} hours"
+        
+        # Days
+        days = int(seconds_passed / 86400)
+        if days == 1:
+            return "a day"
+        elif days < 7:
+            return f"{days} days"
+        
+        # Weeks
+        weeks = int(days / 7)
+        if weeks == 1:
+            return "a week"
+        elif weeks < 4:
+            return f"{weeks} weeks"
+        
+        # Months
+        months = int(days / 30)
+        if months == 1:
+            return "a month"
+        return f"{months} months"
+
+    def _get_recent_conversation_history(self, user_id, preferred_name="User", max_messages=3):
+        """Get recent conversation history for context"""
+        if not user_id:
+            return ""
+            
+        try:
+            # Access conversation manager through chat engine
+            conv_manager = self.chat_engine.conversation_manager
+            
+            # Get user's active conversation or most recent one
+            conversations = conv_manager.get_user_conversations(user_id)
+            if not conversations:
+                return ""
+                
+            # Get the most recent conversation
+            most_recent = conversations[0]
+            
+            # Get the last few messages
+            messages = conv_manager.get_conversation_messages(
+                most_recent['conversation_id'], 
+                limit=max_messages
+            )
+            
+            if not messages:
+                return ""
+                
+            # Format into readable context
+            history = ""
+            for msg in messages:
+                sender = "You" if msg['role'] == 'assistant' else preferred_name
+                content = msg['content']
+                # Truncate very long messages
+                if len(content) > 100:
+                    content = content[:97] + "..."
+                history += f"{sender}: {content}\n"
+                
+            return history
+        except Exception as e:
+            self.logger.error(f"Error getting conversation history: {str(e)}")
+            return ""

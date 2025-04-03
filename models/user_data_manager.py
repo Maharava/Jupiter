@@ -3,6 +3,7 @@ import os
 import uuid
 import time
 import logging
+import datetime
 
 # Set up logging
 logger = logging.getLogger("jupiter.user_data")
@@ -10,9 +11,10 @@ logger = logging.getLogger("jupiter.user_data")
 class UserDataManager:
     """Unified manager for user data storage and operations with cross-platform ID support"""
     
-    def __init__(self, user_data_file):
+    def __init__(self, user_data_file, config=None):
         """Initialize with path to user data file"""
         self.user_data_file = user_data_file
+        self.config = config
         self.current_user = {}
         
         # Create empty user data file if it doesn't exist
@@ -31,7 +33,8 @@ class UserDataManager:
             "name_map": {},
             "platform_map": {
                 "gui": {},
-                "discord": {}
+                "discord": {},
+                "terminal": {}
             },
             "metadata": {
                 "version": 2,
@@ -39,6 +42,7 @@ class UserDataManager:
             }
         }
         self.save_user_data(initial_data)
+        return initial_data
     
     def _migrate_legacy_data(self, legacy_data):
         """Migrate legacy data to new format if needed"""
@@ -49,7 +53,8 @@ class UserDataManager:
                 "name_map": {},
                 "platform_map": {
                     "gui": {},
-                    "discord": {}
+                    "discord": {},
+                    "terminal": {}
                 },
                 "metadata": {
                     "version": 2,
@@ -409,17 +414,61 @@ class UserDataManager:
         return removed_count
     
     def update_user(self, user_id, updated_user_data):
-        """Update a user by ID with new data"""
+        """Update a user by ID with new data with name history tracking"""
         data = self.load_user_data()
         
         if user_id in data["users"]:
-            data["users"][user_id] = updated_user_data
+            # If name is changing, store the old name in history
+            if "name" in updated_user_data:
+                old_name = data["users"][user_id].get("name")
+                new_name = updated_user_data["name"]
+                
+                if old_name and old_name != new_name:
+                    # Initialize name_history if needed
+                    if "name_history" not in data["users"][user_id]:
+                        data["users"][user_id]["name_history"] = []
+                    
+                    # Add old name to history if not already there
+                    if old_name not in data["users"][user_id]["name_history"]:
+                        data["users"][user_id]["name_history"].append(old_name)
+            
+            # Update user data
+            data["users"][user_id].update(updated_user_data)
             self.save_user_data(data)
             return True
         else:
-            logging.warning(f"Attempted to update non-existent user ID: {user_id}")
+            logger.warning(f"Attempted to update non-existent user ID: {user_id}")
             return False
-
+    
+    def get_user_by_name_extended(self, username, platform="all"):
+        """Get user by username, checking across all platforms and name history"""
+        data = self.load_user_data()
+        username_lower = username.lower()
+        
+        # Regular lookup first
+        user, user_id = self.get_user_by_name(username, platform if platform != "all" else "gui")
+        if user:
+            return user, user_id
+            
+        # Check all platforms if not found or if platform="all"
+        for p in ["gui", "discord", "terminal"]:
+            if platform != "all" and p == platform:
+                continue  # Already checked this platform
+                
+            if p in data["platform_map"] and username_lower in data["platform_map"][p]:
+                user_id = data["platform_map"][p][username_lower]
+                if user_id in data["users"]:
+                    return data["users"][user_id], user_id
+        
+        # Check name history in all users
+        for user_id, user_data in data["users"].items():
+            if "name_history" in user_data:
+                for historical_name in user_data["name_history"]:
+                    if historical_name.lower() == username_lower:
+                        return user_data, user_id
+        
+        return None, None
+    
     def create_user(self, user_data):
         """Create a new user with the provided data
         

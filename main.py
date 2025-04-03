@@ -10,7 +10,6 @@ from models.llm_client import LLMClient
 from models.user_data_manager import UserDataManager
 from utils.logger import Logger
 from ui.terminal_interface import TerminalInterface
-from ui.gui_interface import GUIInterface
 from core.info_extractor import InfoExtractor
 from core.chat_engine import ChatEngine
 from io_wake_word.io_wake_word import WakeWordDetector
@@ -71,7 +70,6 @@ def main():
     logger = logging.getLogger("main")
 
     parser = argparse.ArgumentParser(description="Jupiter Chat")
-    parser.add_argument("--gui", action="store_true", help="Use GUI interface instead of terminal")
     parser.add_argument("--test", action="store_true", help="Run in offline test mode without LLM backend")
     args = parser.parse_args()
     
@@ -90,17 +88,11 @@ def main():
     
     logger = Logger(config['paths']['logs_folder'])
     
-    # Choose interface based on argument
-    if args.gui:
-        ui = GUIInterface(
-            jupiter_color=config['ui']['jupiter_color'],
-            user_color=config['ui']['user_color']
-        )
-    else:
-        ui = TerminalInterface(
-            jupiter_color=config['ui']['jupiter_color'],
-            user_color=config['ui']['user_color']
-        )
+    # Always use terminal interface
+    ui = TerminalInterface(
+        jupiter_color=config['ui']['jupiter_color'],
+        user_color=config['ui']['user_color']
+    )
     
     # Create necessary folders
     for folder in [config['paths']['prompt_folder'], config['paths']['logs_folder']]:
@@ -108,15 +100,9 @@ def main():
     
     # Display startup message
     if args.test:
-        if args.gui and hasattr(ui, 'set_status'):
-            ui.set_status("Running in TEST MODE - No LLM connection", True)
-        else:
-            print("⚠️ Running in TEST MODE - No LLM connection")
+        print("⚠️ Running in TEST MODE - No LLM connection")
     else:
-        if args.gui and hasattr(ui, 'set_status'):
-            ui.set_status("Processing previous conversation logs...", True)
-        else:
-            print("Processing previous conversation logs...")
+        print("Processing previous conversation logs...")
         
     # Initialize info extractor
     info_extractor = InfoExtractor(

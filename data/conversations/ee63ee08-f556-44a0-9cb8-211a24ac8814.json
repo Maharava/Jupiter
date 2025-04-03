@@ -1,0 +1,17 @@
+{
+  "conversation_id": "ee63ee08-f556-44a0-9cb8-211a24ac8814",
+  "created_at": 1743671966,
+  "title": "Conversation on 2025-04-03 20:19",
+  "participants": [
+    "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9"
+  ],
+  "messages": [
+    {
+      "message_id": "598e84e1-0ea9-497e-a473-55053534ad12",
+      "timestamp": 1743671969,
+      "sender_id": "jupiter",
+      "content": "Nice to meet you, Reece! How can I help you today?",
+      "type": "assistant"
+    }
+  ]
+}
