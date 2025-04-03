@@ -1,6 +1,6 @@
 from .registry import Command, registry
 import inspect
-# Add Discord import
+import logging
 import discord
 
 def id_command(ctx, args=None):
@@ -28,45 +28,49 @@ Platforms: {', '.join(platform_list) if platform_list else platform + " only"}
 """
 
 def link_command(ctx, args=None):
-    """Link user identity across platforms"""
-    # Get components from context
+    """Link two user accounts together"""
     user_manager = ctx.get("user_manager")
-    user = ctx.get("user")
-    platform = ctx.get("platform")
+    current_user = ctx.get("user")
+    platform = ctx.get("platform", "unknown")
     
-    if not args:
-        return ("Usage: `/link [platform] [username]`\n"
-                "Example: `/link gui JohnDoe`\n\n"
-                "Available platforms: gui, terminal")
+    # Setup logging
+    logger = logging.getLogger("jupiter.commands")
+    logger.info(f"Link command called from platform: {platform}")
     
-    # Parse arguments - similar to your existing implementation
-    parts = args.split(None, 1)
-    if len(parts) < 2:
-        return "Please specify both platform and username."
-        
-    target_platform, target_name = parts
+    if not args or not args.strip():
+        return "Please provide a username to link with. Usage: `/link [username]`"
     
-    # Validate platform
-    if target_platform.lower() not in ["gui", "terminal"]:
-        return f"Unknown platform '{target_platform}'. Supported platforms: gui, terminal"
-        
-    # Attempt linking
-    try:
-        source_platform = platform
-        source_name = user.get('name')
-        
-        success, result_message = user_manager.link_platform_identities(
-            source_platform, source_name,
-            target_platform.lower(), target_name
-        )
-        
-        if success:
-            return f"✅ Success! {result_message}"
-        else:
-            return f"❌ Linking failed: {result_message}"
-            
-    except Exception as e:
-        return "An error occurred while linking identities. Please try again later."
+    target_username = args.strip()
+    logger.info(f"Looking for target user: '{target_username}'")
+    
+    # Check if current user exists
+    if not current_user or 'user_id' not in current_user:
+        logger.warning("Current user not registered")
+        return "You need to be registered first."
+    
+    logger.info(f"Current user: {current_user.get('name')} (ID: {current_user.get('user_id')})")
+    
+    # Get target user - search across all platforms
+    target_user = user_manager.get_user(target_username, platform="all")
+    
+    logger.info(f"Target user found: {target_user is not None}")
+    if target_user:
+        logger.info(f"Target user: {target_user.get('name')} (ID: {target_user.get('user_id')})")
+    
+    if not target_user or 'user_id' not in target_user:
+        return f"User '{target_username}' not found. Make sure the username is correct."
+    
+    # Don't link to self
+    if current_user['user_id'] == target_user['user_id']:
+        return "You can't link your account to itself."
+    
+    # Link accounts
+    success = user_manager.link_accounts(current_user['user_id'], target_user['user_id'])
+    
+    if success:
+        return f"Successfully linked your account with '{target_user.get('name')}' (ID: {target_user.get('user_id')}). All your data has been merged."
+    else:
+        return f"Failed to link accounts. Please try again or contact an administrator."
 
 def help_command(ctx, args=None):
     """Show help information"""
@@ -319,29 +323,32 @@ def model_command(ctx, args=None):
     
     return response
 
-def _handle_help_command(self, args):
-    """Handle /help command"""
-    help_text = "# Available Commands\n\n"
+def name_command(ctx, args=None):
+    """Change your display name"""
+    user_manager = ctx.get("user_manager")
+    user = ctx.get("user")
     
-    help_text += "## General Commands\n"
-    help_text += "- `/help` - Show this help message\n"
-    help_text += "- `/name [new name]` - Change your name\n"
-    help_text += "- `/memory` - Show what Jupiter remembers about you\n"
+    if not args or not args.strip():
+        return "Please provide a new name. Usage: `/name [new name]`"
     
-    help_text += "\n## Conversation Management\n"
-    help_text += "- `/history [limit]` - Show your recent conversations\n"
-    help_text += "- `/history with [username]` - Show conversations with a specific user\n"
-    help_text += "- `/conversation [ID]` - View a specific conversation\n"
-    help_text += "- `/conversation current` - View the current conversation\n"
-    help_text += "- `/search [query]` - Search your conversations\n"
+    new_name = args.strip()
     
-    help_text += "\n## Voice Commands\n"
-    help_text += "- `/voice on|off` - Enable or disable voice recognition\n"
+    # Check if user exists
+    if not user or 'user_id' not in user:
+        return "You need to be registered first."
     
-    if self.voice_manager and self.voice_manager.detector_available:
-        help_text += "- `/debug voice` - Show voice recognition debug information\n"
+    # Update the name
+    user_id = user['user_id']
+    old_name = user.get('name')
+    user['name'] = new_name
     
-    return help_text
+    # Save the change
+    success = user_manager.update_user(user_id, user)
+    
+    if success:
+        return f"Your name has been updated to **{new_name}**"
+    else:
+        return "There was an error updating your name."
 
 # Register the command
 registry.register(Command(
@@ -380,8 +387,9 @@ registry.register(Command(
 registry.register(Command(
     name="link",
     handler=link_command,
-    description="Link your identity with another platform",
-    usage="/link [platform] [username]"
+    description="Link your account with another user's account",
+    usage="/link [username]",
+    platforms=["discord", "terminal", "gui"]
 ))
 
 registry.register(Command(
@@ -404,4 +412,68 @@ registry.register(Command(
     platforms=["discord"]  # Only available on Discord
 ))
 
-# Add other common commands...
+def prompt_command(ctx, args=None):
+    """Show the current system prompt that guides Jupiter's behavior"""
+    import os
+    
+    # Try to get the path to the system prompt
+    prompt_path = None
+    
+    # Method 1: Try to get from conversation_manager config
+    conversation_manager = ctx.get("conversation_manager")
+    if conversation_manager and hasattr(conversation_manager, "config"):
+        config = conversation_manager.config
+        if isinstance(config, dict) and 'paths' in config and 'prompt_folder' in config['paths']:
+            prompt_path = os.path.join(config['paths']['prompt_folder'], "system_prompt.txt")
+    
+    # Method 2: Try to get from client config
+    if not prompt_path or not os.path.exists(prompt_path):
+        client = ctx.get("client")
+        if client and hasattr(client, "config"):
+            config = client.config
+            if hasattr(config, "paths") and hasattr(config.paths, "prompt_folder"):
+                prompt_path = os.path.join(config.paths.prompt_folder, "system_prompt.txt")
+            elif isinstance(config, dict) and 'paths' in config and 'prompt_folder' in config['paths']:
+                prompt_path = os.path.join(config['paths']['prompt_folder'], "system_prompt.txt")
+    
+    # Method 3: Try some common paths
+    if not prompt_path or not os.path.exists(prompt_path):
+        possible_paths = [
+            "prompts/system_prompt.txt",
+            "data/prompts/system_prompt.txt",
+            "config/prompts/system_prompt.txt",
+            os.path.join("data", "prompts", "system_prompt.txt"),
+            os.path.join("config", "prompts", "system_prompt.txt")
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                prompt_path = path
+                break
+    
+    # Failed to find the path
+    if not prompt_path or not os.path.exists(prompt_path):
+        return "Could not locate system prompt file."
+    
+    # Read the system prompt
+    try:
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            system_prompt = f.read()
+    except Exception as e:
+        return f"Error reading system prompt: {e}"
+    
+    # Format the response
+    response = "## Current System Prompt\n\n```\n"
+    response += system_prompt
+    response += "\n```\n\nThis is the system prompt that guides my behavior and capabilities."
+    
+    return response
+
+# Register the prompt command
+registry.register(Command(
+    name="prompt",
+    handler=prompt_command,
+    description="Display the current system prompt",
+    usage="/prompt",
+    platforms=["discord", "terminal", "gui"]  # Available on all platforms
+))

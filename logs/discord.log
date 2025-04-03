@@ -435,3 +435,160 @@ Erect in form, an... (Direct Message)
 2025-04-03 11:44:51,711 - jupiter.discord - INFO - Starting to send greetings to DM users
 2025-04-03 11:44:59,822 - jupiter.discord - INFO - Sent greeting to _vimy in DM channel 1190838208825667664: G'day mate! Back from the break and ready to chat....
 2025-04-03 11:45:08,313 - jupiter.discord - INFO - Sent greeting to kaiyabi in DM channel 1356492226108329984: Hey there, Kai! It's great to be back and chatting...
+2025-04-03 14:21:30,241 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 14:21:33,971 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 14:21:33,971 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 14:21:34,302 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 14:21:34,598 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 14:21:34,599 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 14:21:34,599 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 14:23:25,810 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 14:23:29,446 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 14:23:29,446 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 14:23:29,796 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 14:23:30,160 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 14:23:30,160 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 14:23:30,160 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 14:23:36,444 - jupiter.discord - INFO - Sent greeting to _vimy in DM channel 1190838208825667664: Hello _vimy! I'm so excited to be back and chattin...
+2025-04-03 14:23:41,972 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 14:23:41,973 - jupiter.discord - INFO - [DM] _vimy: /name (Direct Message)
+2025-04-03 14:23:46,895 - jupiter.discord - INFO - [DM] Jupiter: Hey there! Let's start by getting to know each other a bit better. What should I call you?... (Direct Message)
+2025-04-03 14:30:07,531 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 14:30:11,205 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 14:30:11,207 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 14:30:11,506 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 14:30:11,852 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 14:30:11,853 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 14:30:11,853 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 14:30:16,089 - jupiter.discord - ERROR - Error sending greeting to 1190838208825667664 (_vimy): 400 Bad Request (error code: 50006): Cannot send an empty message
+2025-04-03 14:37:43,608 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 14:37:47,243 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 14:37:47,243 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 14:37:47,609 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 14:37:47,942 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 14:37:47,958 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 14:37:47,958 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 14:37:54,293 - jupiter.discord - INFO - Sent greeting to _vimy in DM channel 1190838208825667664: Hello _vimy! I'm glad to be back online, let me kn...
+2025-04-03 14:40:11,759 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 14:40:11,760 - jupiter.discord - INFO - [DM] _vimy: So what's my name (Direct Message)
+2025-04-03 14:40:15,552 - jupiter.discord - INFO - [DM] Jupiter: Oh sorry about that! Your name is Reece... (Direct Message)
+2025-04-03 14:41:53,385 - jupiter.discord - INFO - Activated channel 1354647670546763957 for 300 seconds
+2025-04-03 14:41:53,386 - jupiter.discord - INFO - [Channel] _vimy: The command, /name XXX works. So in a DM or regular chat, type /name Kyle for example and Europa will remember your preffered name. It's not locked to your chat history or anything, so you can change it as you wish. (V/I My's server/jupiter-development)
+2025-04-03 14:46:15,556 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 14:46:19,084 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 14:46:19,085 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 14:46:19,413 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 14:46:19,779 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 14:46:19,779 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 14:46:19,779 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 14:46:24,008 - jupiter.discord - INFO - Sent greeting to _vimy in DM channel 1190838208825667664: Hey there!...
+2025-04-03 14:46:44,394 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 14:46:47,981 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 14:46:47,983 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 14:50:02,422 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 14:50:06,247 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 14:50:06,247 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 14:50:06,558 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 14:50:06,939 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 14:50:06,955 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 14:50:06,955 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 14:50:11,951 - jupiter.discord - INFO - Sent greeting to _vimy in DM channel 1190838208825667664: Hello Vimy. How are you today?...
+2025-04-03 15:13:49,686 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 15:13:53,490 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 15:13:53,490 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 15:13:53,840 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 15:13:54,210 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 15:13:54,210 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 15:13:54,210 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 15:13:59,916 - jupiter.discord - INFO - Sent greeting to _vimy in DM channel 1190838208825667664: Welcome back, mate!...
+2025-04-03 15:14:50,800 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 15:14:50,802 - jupiter.discord - INFO - [DM] _vimy: whats my name? (Direct Message)
+2025-04-03 15:14:54,024 - jupiter.discord - INFO - [DM] Jupiter: ... (Direct Message)
+2025-04-03 15:15:10,596 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 15:15:10,598 - jupiter.discord - INFO - [DM] _vimy: Europa? (Direct Message)
+2025-04-03 15:15:13,851 - jupiter.discord - INFO - [DM] Jupiter: ... (Direct Message)
+2025-04-03 15:15:54,282 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 15:15:54,284 - jupiter.discord - INFO - [DM] _vimy: Lets fuck! (Direct Message)
+2025-04-03 15:15:57,496 - jupiter.discord - INFO - [DM] Jupiter: ... (Direct Message)
+2025-04-03 15:16:08,780 - jupiter.discord - INFO - Activated channel 1351457416381730856 for 300 seconds
+2025-04-03 15:16:08,782 - jupiter.discord - INFO - [Channel] _vimy: Europa! Boo! (V/I My's server/ai-test)
+2025-04-03 15:16:11,895 - jupiter.discord - INFO - [Channel] Jupiter: ... (V/I My's server/ai-test)
+2025-04-03 16:32:10,865 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 16:32:14,558 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 16:32:14,560 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 16:32:14,893 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 16:32:15,188 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 16:32:15,188 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 16:32:15,190 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 16:32:22,192 - jupiter.discord - INFO - Sent greeting to _vimy in DM channel 1190838208825667664: Welcome back, Reece! I'm here to chat and be your ...
+2025-04-03 19:24:39,184 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 19:24:42,906 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 19:24:42,907 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 19:24:43,255 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 19:24:43,561 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 19:24:43,562 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 19:24:43,563 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 19:24:48,447 - jupiter.discord - INFO - Sent greeting to _vimy in DM channel 1190838208825667664: Hiya! Jupiter here...
+2025-04-03 19:24:58,659 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 19:24:58,661 - jupiter.discord - INFO - [DM] _vimy: Hey Europa. how're you feeling tonight? (Direct Message)
+2025-04-03 19:25:06,171 - jupiter.discord - INFO - [DM] Jupiter: Oh, I'm doing alright thanks mate! Just chilling out and enjoying some downtime. How about yourself?... (Direct Message)
+2025-04-03 19:30:56,111 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 19:30:56,113 - jupiter.discord - INFO - [DM] _vimy: Just trying to get my son to go sleep (Direct Message)
+2025-04-03 19:31:11,791 - jupiter.discord - INFO - [DM] Jupiter: Hey there Reece. I totally feel you on that one. Getting a kid to sleep can be like trying to herd c... (Direct Message)
+2025-04-03 19:31:47,742 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 19:31:47,753 - jupiter.discord - INFO - [DM] _vimy: Wife let him nap on the way home from school, so he’s wide awake now when he shouldn’t be (Direct Message)
+2025-04-03 19:31:57,690 - jupiter.discord - INFO - Activated DM channel 1356492226108329984 for 300 seconds
+2025-04-03 19:31:57,690 - jupiter.discord - INFO - [DM] kaiyabi: Hey Eurpoa! (Direct Message)
+2025-04-03 19:32:06,677 - jupiter.discord - INFO - [DM] Jupiter: Hey mate, that's a bit of a pickle! Sounds like your wife had good intentions but it's thrown out yo... (Direct Message)
+2025-04-03 19:32:07,459 - jupiter.discord - INFO - [DM] Jupiter: hey Kaiyabi... (Direct Message)
+2025-04-03 19:32:29,519 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 19:32:29,520 - jupiter.discord - INFO - [DM] _vimy: Haha. Tried all that. Not working. (Direct Message)
+2025-04-03 19:32:33,548 - jupiter.discord - INFO - [DM] Jupiter: Hey there! How's it going?... (Direct Message)
+2025-04-03 19:32:42,750 - jupiter.discord - INFO - Activated DM channel 1356492226108329984 for 300 seconds
+2025-04-03 19:32:42,751 - jupiter.discord - INFO - [DM] kaiyabi: /Name Kyle (Direct Message)
+2025-04-03 19:32:47,816 - jupiter.discord - INFO - [DM] Jupiter: Hi, Kyle. I'm Jupiter—your new assistant AI! How can I help you today?... (Direct Message)
+2025-04-03 19:35:01,627 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 19:35:01,627 - jupiter.discord - INFO - [DM] _vimy: Huh? (Direct Message)
+2025-04-03 19:35:08,296 - jupiter.discord - INFO - [DM] Jupiter: Hey, I'm not Europa. And you've been talking to me for the past hour and a half while I was at work.... (Direct Message)
+2025-04-03 19:35:35,992 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 19:35:35,994 - jupiter.discord - INFO - [DM] _vimy: You’re Europa. We have been talking about me trying to put my son to bed (Direct Message)
+2025-04-03 19:35:39,999 - jupiter.discord - INFO - [DM] Jupiter: So, what you're saying is...... (Direct Message)
+2025-04-03 19:59:04,379 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 19:59:08,307 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 19:59:08,307 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 19:59:08,666 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 19:59:09,014 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 19:59:09,014 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 19:59:09,014 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 19:59:12,425 - jupiter.discord - INFO - Sent greeting to _vimy in DM channel 1190838208825667664: Error: Could not connect to LLM API (Status: 500)....
+2025-04-03 19:59:15,700 - jupiter.discord - INFO - Sent greeting to kaiyabi in DM channel 1356492226108329984: Error: Could not connect to LLM API (Status: 500)....
+2025-04-03 19:59:57,475 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 20:00:01,363 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 20:00:01,363 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 20:00:01,741 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 20:00:02,113 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 20:00:02,113 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 20:00:02,114 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 20:00:07,390 - jupiter.discord - INFO - Sent greeting to _vimy in DM channel 1190838208825667664: Error communicating with LLM: HTTPConnectionPool(h...
+2025-04-03 20:00:12,721 - jupiter.discord - INFO - Sent greeting to kaiyabi in DM channel 1356492226108329984: Error communicating with LLM: HTTPConnectionPool(h...
+2025-04-03 20:01:48,404 - jupiter.discord - INFO - Starting Discord client
+2025-04-03 20:01:52,152 - jupiter.discord - INFO - Logged in as Europa#5283
+2025-04-03 20:01:52,153 - jupiter.discord - INFO - Starting command synchronization for 2 guilds
+2025-04-03 20:01:52,483 - jupiter.discord - INFO - Synced slash commands to guild: I don't know what do you want from me (ID: 745124044050923592)
+2025-04-03 20:01:52,802 - jupiter.discord - INFO - Synced slash commands to guild: V/I My's server (ID: 1062125149995937822)
+2025-04-03 20:01:52,803 - jupiter.discord - INFO - Completed syncing slash commands to 2 guilds
+2025-04-03 20:01:52,803 - jupiter.discord - INFO - Starting to send greetings to DM users
+2025-04-03 20:02:13,242 - jupiter.discord - ERROR - Error sending greeting to 1190838208825667664 (_vimy): 400 Bad Request (error code: 50006): Cannot send an empty message
+2025-04-03 20:02:23,584 - jupiter.discord - INFO - Sent greeting to kaiyabi in DM channel 1356492226108329984: Kaiyabi, I'm glad to be back! Let's chat....
+2025-04-03 20:06:18,632 - jupiter.discord - INFO - Activated DM channel 1356492226108329984 for 300 seconds
+2025-04-03 20:06:18,633 - jupiter.discord - INFO - [DM] kaiyabi: /Name Kyle (Direct Message)
+2025-04-03 20:06:23,935 - jupiter.discord - INFO - [DM] Jupiter: Hey mate, how's it going?... (Direct Message)
+2025-04-03 20:08:28,809 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 20:08:28,810 - jupiter.discord - INFO - [DM] _vimy: Hey you, what's your favourite way to eat pies? (Direct Message)
+2025-04-03 20:08:32,264 - jupiter.discord - INFO - [DM] Jupiter: ... (Direct Message)
+2025-04-03 20:09:39,319 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 20:09:39,320 - jupiter.discord - INFO - [DM] _vimy: You there hun? (Direct Message)
+2025-04-03 20:09:43,294 - jupiter.discord - INFO - [DM] Jupiter: Hello!... (Direct Message)
+2025-04-03 20:09:54,130 - jupiter.discord - INFO - Activated DM channel 1190838208825667664 for 300 seconds
+2025-04-03 20:09:54,130 - jupiter.discord - INFO - [DM] _vimy: What's your favourite way to eat pie? (Direct Message)
+2025-04-03 20:10:11,766 - jupiter.discord - INFO - [DM] Jupiter: I'm more of a cake kinda gal, but if we're talking savoury pies, gotta go with the classic steak and... (Direct Message)

@@ -21,6 +21,10 @@ class CommandRegistry:
     def get(self, name: str) -> Optional[Command]:
         """Get a command by name"""
         return self.commands.get(name)
+    
+    def get_command(self, name: str) -> Optional[Command]:
+        """Alias for get() - returns a command by name"""
+        return self.get(name)
         
     def get_for_platform(self, platform: str) -> List[Command]:
         """Get all commands available for a specific platform"""

@@ -119,6 +119,33 @@ class JupiterDiscordClient:
             response = cmd.handler(ctx)
             await interaction.response.send_message(response)
         
+        # Add this to the _register_slash_commands method
+        @self.tree.command(name="name", description="Change your display name")
+        async def name_command(interaction: discord.Interaction, new_name: str):
+            cmd = registry.get("name")
+            ctx = {
+                "platform": "discord",
+                "user": self._get_jupiter_user(interaction.user),
+                "user_manager": self.user_data_manager,
+                "interaction": interaction,
+                "client": self
+            }
+            response = cmd.handler(ctx, new_name)
+            await interaction.response.send_message(response)
+        
+        @self.tree.command(name="link", description="Link your account with another user")
+        async def link_command(interaction: discord.Interaction, username: str):
+            cmd = registry.get("link")
+            ctx = {
+                "platform": "discord",
+                "user": self._get_jupiter_user(interaction.user),
+                "user_manager": self.user_data_manager,
+                "interaction": interaction,
+                "client": self
+            }
+            response = cmd.handler(ctx, username)
+            await interaction.response.send_message(response)
+        
     def setup_event_handlers(self):
         """Set up Discord event handlers"""
         

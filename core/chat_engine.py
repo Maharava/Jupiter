@@ -5,13 +5,21 @@ import threading
 import re
 import logging
 
-from user_id_commands import handle_id_commands
+# Fix the incorrect import path - remove circular dependency
+try:
+    # Import the command registry instead
+    from utils.commands.registry import registry
+except ImportError:
+    print("Could not import command registry, commands may not work correctly")
+    registry = None
+
 from utils.intent_recog import load_model, get_intent
 from utils.voice_cmd import intent_functions
 from utils.text_processing import count_tokens
 from utils.memory.conversation_manager import ConversationManager
 from utils.voice_manager import VoiceManager, VoiceState
 from utils.piper import llm_speak
+from utils.llm_exchange_logger import LLMExchangeLogger
 
 # Set up logging
 logger = logging.getLogger("jupiter.core.chat_engine")
@@ -27,6 +35,9 @@ class ChatEngine:
         self.ui = ui
         self.config = config
         self.test_mode = test_mode
+        
+        # Set current platform - default to "gui"
+        self.current_platform = "gui"
         
         # Initialize conversation manager (replaces conversation_history)
         self.conversation_manager = ConversationManager(config, user_data_manager)
@@ -46,6 +57,9 @@ class ChatEngine:
         
         # Initialize voice manager
         self.voice_manager = self._initialize_voice_manager()
+        
+        # Initialize LLM exchange logger
+        self.exchange_logger = LLMExchangeLogger(config['paths']['logs_folder'])
         
         if self.test_mode:
             print(f"🧪 ChatEngine initialized in TEST MODE")
@@ -107,7 +121,7 @@ class ChatEngine:
     def load_system_prompt(self):
         """Load system prompt from file"""
         system_prompt_path = os.path.join(self.config['paths']['prompt_folder'], "system_prompt.txt")
-        if os.path.exists(system_prompt_path):
+        if (os.path.exists(system_prompt_path)):
             with open(system_prompt_path, 'r', encoding='utf-8') as f:
                 prompt = f.read()
                 
@@ -258,9 +272,9 @@ class ChatEngine:
             '/memory': self._handle_memory_command,
             '/debug voice': self._handle_debug_voice_command,
             '/help': self._handle_help_command,
-            '/history': self._handle_history_command,      # New command
-            '/conversation': self._handle_conversation_command,  # New command
-            '/search': self._handle_search_command         # New command
+            '/history': self._handle_history_command,
+            '/conversation': self._handle_conversation_command,
+            '/search': self._handle_search_command
         }
         
         # Extract command and arguments
@@ -276,11 +290,6 @@ class ChatEngine:
         for cmd_prefix, handler in command_handlers.items():
             if cmd_prefix.startswith(command):
                 return handler(args)
-                
-        # Handle ID-related commands separately
-        id_response = handle_id_commands(self, user_input)
-        if id_response:
-            return id_response
         
         # Check for commands in the registry
         # Import registry here to avoid circular imports
@@ -307,7 +316,11 @@ class ChatEngine:
             try:
                 return cmd.handler(ctx, args)
             except Exception as e:
-                self.logger.error(f"Error executing command '{cmd_name}': {e}")
+                # Fix the logging error by using standard logging
+                import logging
+                logging.error(f"Error executing command '{cmd_name}': {e}")
+                # Or alternatively, if self.logger exists:
+                # self.logger.exception(f"Error executing command '{cmd_name}'")
                 return f"Error executing command: {str(e)}"
                 
         # Not a command
@@ -377,19 +390,24 @@ class ChatEngine:
     
     def _handle_help_command(self, args):
         """Handle help command"""
-        help_text = """
-Available commands:
-/voice on|off - Enable or disable voice recognition
-/name [new name] - Change your name
-/memory - Show what I remember about you
-/id - Show your Jupiter ID information
-/link [platform] [username] - Link your identity with another platform
-/debug voice - Show voice system diagnostic information
-/help - Show this help message
-/history [limit|with username] - Show conversation history
-/conversation [ID|current] - View a specific conversation
-/search [query] - Search your conversations for specific content
-        """
+        # Use the registry to get commands
+        from utils.commands.registry import registry
+        
+        commands = registry.get_for_platform(self.current_platform)
+        
+        help_text = "# Available Commands\n\n"
+        
+        # Group commands by category
+        for cmd in sorted(commands, key=lambda x: x.name):
+            help_text += f"- `{cmd.usage}` - {cmd.description}\n"
+        
+        # Add built-in commands not in registry
+        help_text += "\n## Additional Commands\n"
+        help_text += "- `/voice on|off` - Enable or disable voice recognition\n"
+        help_text += "- `/memory` - Show what I remember about you\n"
+        help_text += "- `/history [limit|with username]` - Show conversation history\n"
+        help_text += "- `/conversation [ID|current]` - View a specific conversation\n"
+        help_text += "- `/search [query]` - Search your conversations\n"
         
         # Add test mode info
         if self.test_mode:
@@ -499,144 +517,6 @@ Available commands:
         result += "Use `/conversation [ID]` to view a specific conversation."
         return result
 
-    def _handle_conversation_command(self, args):
-        """
-        Handle /conversation command to view a specific conversation
-        
-        Arguments:
-            args: Conversation ID or "current" for current conversation
-            
-        Returns:
-            Formatted conversation display
-        """
-        # Check for arguments
-        if not args:
-            return "Usage: `/conversation [ID]` or `/conversation current`"
-        
-        # Get current user ID
-        user_id = self.user_data_manager.current_user.get('user_id')
-        if not user_id:
-            return "You need to be logged in to view conversations."
-        
-        # Handle "current" keyword
-        if args.lower() == "current":
-            conversation_id = self.conversation_manager.current_conversation_id
-            if not conversation_id:
-                return "No active conversation."
-        else:
-            conversation_id = args.strip()
-        
-        # Get the conversation
-        conversation = self.conversation_manager.get_conversation(conversation_id)
-        
-        if not conversation:
-            return f"Conversation with ID '{conversation_id}' not found."
-        
-        # Check if user has access to this conversation
-        if user_id not in conversation["participants"]:
-            return "You don't have access to this conversation."
-        
-        # Format conversation
-        date_str = datetime.datetime.fromtimestamp(conversation["created_at"]).strftime("%Y-%m-%d %H:%M")
-        result = f"## {conversation['title']}\n"
-        result += f"Date: {date_str}\n\n"
-        
-        # Add participant information
-        participant_names = []
-        for p_id in conversation["participants"]:
-            user = self.user_data_manager.get_user_by_id(p_id)
-            if user:
-                participant_names.append(user.get("name", "Unknown"))
-        
-        if participant_names:
-            result += f"Participants: {', '.join(participant_names)}\n\n"
-        
-        # Add messages (limit to last 50 to avoid too long responses)
-        messages = conversation["messages"][-50:] if len(conversation["messages"]) > 50 else conversation["messages"]
-        
-        result += "### Conversation\n"
-        for msg in messages:
-            # Format timestamp
-            time_str = datetime.datetime.fromtimestamp(msg["timestamp"]).strftime("%H:%M:%S")
-            
-            # Get sender name
-            if msg["sender_id"] == "jupiter":
-                sender_name = "Jupiter"
-            else:
-                user = self.user_data_manager.get_user_by_id(msg["sender_id"])
-                sender_name = user.get("name", "Unknown") if user else "Unknown"
-            
-            # Add to result
-            result += f"**{sender_name}** ({time_str}):\n{msg['content']}\n\n"
-        
-        # Add note if we limited the messages
-        if len(conversation["messages"]) > 50:
-            result += f"_Note: Only showing the last 50 of {len(conversation['messages'])} messages._"
-        
-        return result
-
-    def _handle_search_command(self, args):
-        """
-        Handle /search command to search conversations
-        
-        Arguments:
-            args: Search query
-            
-        Returns:
-            Search results
-        """
-        # Check for query
-        if not args:
-            return "Usage: `/search [query]` - Search your conversations for specific content"
-        
-        # Get current user ID
-        user_id = self.user_data_manager.current_user.get('user_id')
-        if not user_id:
-            return "You need to be logged in to search conversations."
-        
-        # Perform search
-        results = self.conversation_manager.search_conversations(user_id, args)
-        
-        if not results:
-            return f"No conversations found containing '{args}'."
-        
-        # Format results
-        result = f"## Search Results for '{args}'\n\n"
-        result += f"Found {sum(r['match_count'] for r in results)} matches across {len(results)} conversations.\n\n"
-        
-        for i, conv in enumerate(results[:5], 1):  # Limit to top 5 conversations
-            # Format date
-            date_str = datetime.datetime.fromtimestamp(conv["created_at"]).strftime("%Y-%m-%d %H:%M")
-            
-            # Add conversation info
-            result += f"{i}. **{conv['title']}** ({date_str})\n"
-            result += f"   - {conv['match_count']} matches\n"
-            result += f"   - ID: `{conv['conversation_id']}`\n"
-            
-            # Show a few matches as examples (limit to 3)
-            result += "   - Examples:\n"
-            for j, match in enumerate(conv["matches"][:3], 1):
-                # Get sender name
-                if match["sender_id"] == "jupiter":
-                    sender_name = "Jupiter"
-                else:
-                    user = self.user_data_manager.get_user_by_id(match["sender_id"])
-                    sender_name = user.get("name", "Unknown") if user else "Unknown"
-                
-                # Truncate message if too long
-                content = match["content"]
-                if len(content) > 100:
-                    content = content[:97] + "..."
-                
-                result += f"     {j}. **{sender_name}**: {content}\n"
-            
-            result += "\n"
-        
-        if len(results) > 5:
-            result += f"_Showing top 5 of {len(results)} matching conversations._\n\n"
-        
-        result += "Use `/conversation [ID]` to view a specific conversation."
-        return result
 
     def __del__(self):
         """Clean up when the object is destroyed"""
@@ -646,6 +526,10 @@ Available commands:
                 self.voice_manager.stop()
         except:
             pass
+        
+        # Clean up all exchange sessions
+        if hasattr(self, 'exchange_logger'):
+            self.exchange_logger.cleanup_all_sessions(delete_logs=False)
             
     def restart_chat(self):
         """Restart chat session while preserving user data"""
@@ -671,7 +555,7 @@ Available commands:
             test_mode_notice = " (TEST MODE ACTIVE)"
         
         # Show welcome message
-        restart_message = f"=== Jupiter Chat Restarted{test_mode_notice} ==="
+        restart_message = f"=== {self.ai_name} Chat Restarted{test_mode_notice} ==="
         self.ui.print_jupiter_message(restart_message)
         
         greeting = f"Hello again, {self.user_data_manager.current_user.get('name', 'User')}! How can I help you today?"
@@ -803,6 +687,10 @@ Available commands:
             # Check for exit
             if self.ui.handle_exit_command(user_input):
                 self._speak_response("Ending chat session. Goodbye!")
+                # End logging session and delete logs
+                user_id = self.user_data_manager.current_user.get('user_id')
+                if user_id:
+                    self.exchange_logger.end_session(user_id, delete_logs=False)
                 break
                 
             # Log user input
@@ -865,6 +753,10 @@ Available commands:
         if user_id:
             self.conversation_manager.start_conversation([user_id])
         
+        # Start exchange logging for this user
+        if user_id:
+            self.exchange_logger.start_session(user_id, actual_name)
+        
         # Check if this is a returning user
         if actual_name.lower() == name.lower() and actual_name != name:
             # This is a returning user with different capitalization
@@ -926,13 +818,16 @@ Available commands:
         # Validate and clean the response
         response = self._validate_response(response)
         
+        # Log the complete exchange
+        self.exchange_logger.log_exchange(user_id, llm_message, user_input, response)
+        
         # Output response
         self.ui.print_jupiter_message(response)
         self.logger.log_message("Jupiter:", response)
         self._speak_response(response)
         
         # Add to conversation context
-        self.conversation_manager.add_to_context("jupiter", response, "assistant")
+        self.conversation_manager.add_to_context(self.ai_name.lower(), response, "assistant")
         
         # Reset UI status
         self._update_ui_status("Ready")
@@ -1051,7 +946,7 @@ Available commands:
             if pattern in response:
                 # Truncate at the first occurrence
                 truncated = response.split(pattern)[0].strip()
-                self.logger.warning(f"Detected AI speaking for user '{pattern}', truncating response")
+                logger.warning(f"Detected AI speaking for user '{pattern}', truncating response")
                 return truncated
         
         return response

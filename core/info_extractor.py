@@ -235,11 +235,13 @@ DO NOT include any explanations outside the JSON. ONLY return valid JSON.
         # Parse LLM response
         extracted_info = self.parse_llm_response(llm_response)
         
-        # Get user data
+        # Get user data - now with name history support
         user_data = self.user_data_manager.get_user(username)
         if not user_data:
             # Create new user if not found
             user_data = {'name': username}
+            user_id = self.user_data_manager.create_user(user_data)
+            user_data['user_id'] = user_id
         
         # Set as current user
         self.user_data_manager.set_current_user(user_data)

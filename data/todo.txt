@@ -1,0 +1,2 @@
+[2025-04-03 20:07:19] [discord] [kaiyabi] Learn Lora's
+[2025-04-03 20:10:03] [discord] [Reece] Add a catch so if a response is empty it tries again

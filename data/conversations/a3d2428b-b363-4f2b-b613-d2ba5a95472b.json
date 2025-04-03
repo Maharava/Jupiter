@@ -1,0 +1,80 @@
+{
+  "conversation_id": "a3d2428b-b363-4f2b-b613-d2ba5a95472b",
+  "created_at": 1743651013,
+  "title": "Conversation on 2025-04-03 14:30",
+  "participants": [
+    "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9"
+  ],
+  "messages": [
+    {
+      "message_id": "14e0b039-af55-49a6-9ffc-157153a79877",
+      "timestamp": 1743651016,
+      "sender_id": "jupiter",
+      "content": "Nice to meet you, Reece! How can I help you today?",
+      "type": "assistant"
+    },
+    {
+      "message_id": "0821c824-cdae-4261-83d1-f1086da64217",
+      "timestamp": 1743651023,
+      "sender_id": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9",
+      "content": "How about you ask me a question? Any question you like.",
+      "type": "user"
+    },
+    {
+      "message_id": "0796cb5c-41b1-4a59-9965-94d46e68d325",
+      "timestamp": 1743651032,
+      "sender_id": "jupiter",
+      "content": "Hey there! I'm Jupiter, your friendly neighbourhood AI assistant. What's on your mind today?",
+      "type": "assistant"
+    },
+    {
+      "message_id": "6245c5ee-fb51-460f-956d-910aae4b0007",
+      "timestamp": 1743651036,
+      "sender_id": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9",
+      "content": "Ask me a question",
+      "type": "user"
+    },
+    {
+      "message_id": "b36305b8-778b-4f6d-8388-34875c0e4c8f",
+      "timestamp": 1743651044,
+      "sender_id": "jupiter",
+      "content": "Hmm, let's see... What's the most interesting thing that happened to you recently?",
+      "type": "assistant"
+    },
+    {
+      "message_id": "5c23a8c9-2f29-40b9-8125-54a3ecfe6f3f",
+      "timestamp": 1743651055,
+      "sender_id": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9",
+      "content": "Went to a therapy appointment",
+      "type": "user"
+    },
+    {
+      "message_id": "0be1bd4b-10e1-4a1d-8669-f11ced31f553",
+      "timestamp": 1743651061,
+      "sender_id": "jupiter",
+      "content": "Oh cool! How did it go?",
+      "type": "assistant"
+    },
+    {
+      "message_id": "cd775485-9b67-46e8-adf3-7e1466193855",
+      "timestamp": 1743651076,
+      "sender_id": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9",
+      "content": "Really good actually. The therapist was good, let me talk, and helped me realise a few things",
+      "type": "user"
+    },
+    {
+      "message_id": "6f7d4756-6f04-4d6b-9549-7567f5b71a51",
+      "timestamp": 1743651088,
+      "sender_id": "jupiter",
+      "content": "That's great to hear! It sounds like you found someone who really understands your needs. What kind of insights did they help you uncover?",
+      "type": "assistant"
+    },
+    {
+      "message_id": "5233055f-5b0d-4339-b6b6-1027d326ac76",
+      "timestamp": 1743651132,
+      "sender_id": "688a0c9b-21f7-4ce5-abe1-44ba2282e6b9",
+      "content": "My need to be more affirmative, and how I internalized my mothers desire to avoid conflict a bit toooo much",
+      "type": "user"
+    }
+  ]
+}

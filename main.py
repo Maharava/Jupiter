@@ -21,21 +21,8 @@ def load_config():
     """Load configuration from file or use defaults"""
     config_path = "config/default_config.json"
     
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                
-                # Inject Discord token from environment if available
-                if 'discord' in config and os.getenv('JUPITER_DISCORD_TOKEN'):
-                    config['discord']['token'] = os.getenv('JUPITER_DISCORD_TOKEN')
-                    
-                return config
-        except Exception as e:
-            print(f"Error loading configuration: {e}")
-    
     # Default configuration (fallback)
-    return {
+    default_config = {
         "llm": {
             "provider": "ollama",
             "api_url": "http://localhost:11434",
@@ -51,13 +38,32 @@ def load_config():
             "prompt_folder": "prompts",
             "logs_folder": "logs",
             "user_data_file": "user_data.json",
-            "data_folder": "data"  # Add this line
+            "data_folder": "data"
         },
         "ui": {
             "jupiter_color": "yellow",
             "user_color": "magenta"
         }
     }
+    
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                
+                # Inject Discord token from environment if available
+                if 'discord' in config and os.getenv('JUPITER_DISCORD_TOKEN'):
+                    config['discord']['token'] = os.getenv('JUPITER_DISCORD_TOKEN')
+                
+                # Ensure data_folder exists in paths
+                if 'paths' in config and 'data_folder' not in config['paths']:
+                    config['paths']['data_folder'] = default_config['paths']['data_folder']
+                
+                return config
+        except Exception as e:
+            print(f"Error loading configuration: {e}")
+    
+    return default_config
 
 def main():
     """Main entry point for Jupiter Chat"""

@@ -250,7 +250,7 @@ class UserDataManager:
                 if not value or value.strip() == "":
                     continue
                 
-                # For lists (likes, dislikes, etc.)
+                # For lists (likes, dislikes, interests, hobbies):
                 if category in ['likes', 'dislikes', 'interests', 'hobbies']:
                     if category not in self.current_user:
                         self.current_user[category] = []
@@ -407,3 +407,60 @@ class UserDataManager:
             logger.info(f"Cleaned up {removed_count} old user profiles")
         
         return removed_count
+    
+    def update_user(self, user_id, updated_user_data):
+        """Update a user by ID with new data"""
+        data = self.load_user_data()
+        
+        if user_id in data["users"]:
+            data["users"][user_id] = updated_user_data
+            self.save_user_data(data)
+            return True
+        else:
+            logging.warning(f"Attempted to update non-existent user ID: {user_id}")
+            return False
+
+    def create_user(self, user_data):
+        """Create a new user with the provided data
+        
+        Args:
+            user_data (dict): User data including at least a name
+            
+        Returns:
+            str: The created user ID
+        """
+        if 'name' not in user_data:
+            logger.warning("Attempted to create user without name")
+            return None
+            
+        # Generate a new UUID for the user
+        user_id = str(uuid.uuid4())
+        
+        # Set required fields
+        user_data['user_id'] = user_id
+        user_data['created_at'] = time.time()
+        user_data['last_seen'] = time.time()
+        
+        # Initialize platforms if not present
+        if 'platforms' not in user_data:
+            user_data['platforms'] = {'gui': True}
+        
+        # Load current data
+        data = self.load_user_data()
+        
+        # Add user to data structure
+        data['users'][user_id] = user_data
+        
+        # Update name mapping
+        name_lower = user_data['name'].lower()
+        data['name_map'][name_lower] = user_id
+        
+        # Update platform mappings
+        for platform in user_data.get('platforms', {}):
+            if platform in data['platform_map']:
+                data['platform_map'][platform][name_lower] = user_id
+        
+        # Save the updated data
+        self.save_user_data(data)
+        
+        return user_id  # Add this line to return the created user ID
